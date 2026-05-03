@@ -120,29 +120,6 @@ class TestFieldEncryptorKeyRotation(TestCase):
 
 
 @override_settings(**ENCRYPTION_SETTINGS)
-class TestComputeHash(TestCase):
-    def test_hash_deterministic(self):
-        from django_field_encryption import compute_hash
-
-        h1 = compute_hash('29901012345678')
-        h2 = compute_hash('29901012345678')
-        self.assertEqual(h1, h2)
-
-    def test_hash_different_inputs(self):
-        from django_field_encryption import compute_hash
-
-        h1 = compute_hash('29901012345678')
-        h2 = compute_hash('29901012345679')
-        self.assertNotEqual(h1, h2)
-
-    def test_hash_length(self):
-        from django_field_encryption import compute_hash
-
-        h = compute_hash('test')
-        self.assertEqual(len(h), 64)
-
-
-@override_settings(**ENCRYPTION_SETTINGS)
 class TestTamperDetection(TestCase):
     def setUp(self):
         from django_field_encryption import FieldEncryptor
@@ -206,15 +183,6 @@ class TestEncryptedCharField(TestCase):
         python_value = field.to_python(prep_value)
         self.assertEqual(python_value, original)
 
-
-@override_settings(**ENCRYPTION_SETTINGS)
-class TestNationalIdModel(TestCase):
-    def test_national_id_hash_auto_computed(self):
-        from django_field_encryption import compute_hash
-
-        hash_val = compute_hash('29901012345678')
-        self.assertEqual(len(hash_val), 64)
-        self.assertIsInstance(hash_val, str)
 
 
 @override_settings(**ENCRYPTION_SETTINGS)

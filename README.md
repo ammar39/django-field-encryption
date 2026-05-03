@@ -218,6 +218,19 @@ active_key = get_active_key_id()  # Returns currently active key_id
 master_key = get_master_key('v1') # Returns raw 32-byte key for key_id
 ```
 
+## Compatibility
+
+| Python | Django |
+|--------|--------|
+| 3.9    | 4.2, 5.x |
+| 3.10   | 4.2, 5.x |
+| 3.11   | 4.2, 5.x |
+| 3.12   | 4.2, 5.x |
+
+- Django 4.2 LTS is fully supported
+- Django 5.0+ supported
+- Will support Django 6.x when released (constraint is `<7.0`)
+
 ## Security Notes
 
 - Keys are 32 bytes (256 bits) for AES-256

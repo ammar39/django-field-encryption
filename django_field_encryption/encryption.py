@@ -240,9 +240,5 @@ class FileEncryptor:
         cls._key_cache.clear()
 
 
-def compute_hash(plaintext: str) -> str:
-    return hashlib.sha256(plaintext.encode('utf-8')).hexdigest()
-
-
 def generate_master_key() -> str:
     return base64.urlsafe_b64encode(os.urandom(32)).decode('ascii')
