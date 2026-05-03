@@ -2,6 +2,7 @@ import base64
 import hashlib
 import logging
 import os
+import threading
 from typing import Optional
 
 from cryptography.exceptions import InvalidTag
@@ -28,6 +29,10 @@ logger = logging.getLogger(__name__)
 FIELD_KEY_INFO_PREFIX = b'data-protection-field-'
 FILE_KEY_INFO_PREFIX = b'data-protection-file-'
 
+_field_key_cache: dict[str, AESGCM] = {}
+_file_key_cache: dict[str, AESGCM] = {}
+_cache_lock = threading.Lock()
+
 
 def _derive_aes_key(master_key: bytes, key_id: str, info_prefix: bytes) -> bytes:
     hkdf = HKDF(
@@ -40,19 +45,19 @@ def _derive_aes_key(master_key: bytes, key_id: str, info_prefix: bytes) -> bytes
 
 
 class FieldEncryptor:
-    _key_cache: dict[str, AESGCM] = {}
-
     @classmethod
     def _get_aesgcm(
         cls, key_id: str, info_prefix: bytes = FIELD_KEY_INFO_PREFIX
     ) -> AESGCM:
         cache_key = f'{key_id}:{info_prefix.decode()}'
-        if cache_key in cls._key_cache:
-            return cls._key_cache[cache_key]
+        with _cache_lock:
+            if cache_key in _field_key_cache:
+                return _field_key_cache[cache_key]
         master_key = _get_master_key(key_id)
         derived = _derive_aes_key(master_key, key_id, info_prefix)
         aesgcm = AESGCM(derived)
-        cls._key_cache[cache_key] = aesgcm
+        with _cache_lock:
+            _field_key_cache[cache_key] = aesgcm
         return aesgcm
 
     @classmethod
@@ -137,23 +142,24 @@ class FieldEncryptor:
 
     @classmethod
     def clear_cache(cls):
-        cls._key_cache.clear()
+        with _cache_lock:
+            _field_key_cache.clear()
 
 
 class FileEncryptor:
-    _key_cache: dict[str, AESGCM] = {}
-
     FILE_MAGIC = b'ENC2'
 
     @classmethod
     def _get_aesgcm(cls, key_id: str) -> AESGCM:
         cache_key = f'{key_id}:file'
-        if cache_key in cls._key_cache:
-            return cls._key_cache[cache_key]
+        with _cache_lock:
+            if cache_key in _file_key_cache:
+                return _file_key_cache[cache_key]
         master_key = _get_master_key(key_id)
         derived = _derive_aes_key(master_key, key_id, FILE_KEY_INFO_PREFIX)
         aesgcm = AESGCM(derived)
-        cls._key_cache[cache_key] = aesgcm
+        with _cache_lock:
+            _file_key_cache[cache_key] = aesgcm
         return aesgcm
 
     @classmethod
@@ -237,8 +243,14 @@ class FileEncryptor:
 
     @classmethod
     def clear_cache(cls):
-        cls._key_cache.clear()
+        with _cache_lock:
+            _file_key_cache.clear()
 
 
 def generate_master_key() -> str:
     return base64.urlsafe_b64encode(os.urandom(32)).decode('ascii')
+
+
+def compute_hash(value: str) -> str:
+    """Compute a deterministic SHA-256 hash for indexing encrypted fields."""
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()

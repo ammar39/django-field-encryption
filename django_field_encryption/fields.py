@@ -6,27 +6,12 @@ from .encryption import PREFIX_SEPARATOR, FieldEncryptor
 from .exceptions import DecryptionError, EncryptionError
 
 
-class EncryptedCharField(models.TextField):
-    description = 'AES-256-GCM encrypted CharField stored as TextField'
-
+class EncryptedFieldMixin:
     def __init__(self, *args, strict=False, **kwargs):
-        kwargs.setdefault('max_length', None)
-        self._char_max_length = kwargs.pop('char_max_length', 255)
         self._strict = strict
-        kwargs.pop('strict', None)
         super().__init__(*args, **kwargs)
 
-    def get_prep_value(self, value):
-        if value is None or value == '':
-            return value
-        try:
-            return FieldEncryptor.encrypt(str(value))
-        except EncryptionError:
-            if self._strict:
-                raise
-            return value
-
-    def from_db_value(self, value, expression, connection):
+    def _decrypt_value(self, value):
         if value is None or value == '':
             return value
         try:
@@ -40,21 +25,37 @@ class EncryptedCharField(models.TextField):
                 raise
             return value
 
+    def from_db_value(self, value, expression, connection):
+        return self._decrypt_value(value)
+
     def to_python(self, value):
         if value is None or value == '':
             return value
         if isinstance(value, str) and PREFIX_SEPARATOR in value:
-            try:
-                return FieldEncryptor.decrypt(value)
-            except DecryptionError:
-                if self._strict:
-                    raise
-                return value
-            except Exception:
-                if self._strict:
-                    raise
-                return value
+            return self._decrypt_value(value)
         return value
+
+    def _encrypt_value(self, value):
+        if value is None or value == '':
+            return value
+        try:
+            return FieldEncryptor.encrypt(str(value))
+        except EncryptionError:
+            if self._strict:
+                raise
+            return value
+
+
+class EncryptedCharField(EncryptedFieldMixin, models.TextField):
+    description = 'AES-256-GCM encrypted CharField stored as TextField'
+
+    def __init__(self, *args, strict=False, **kwargs):
+        kwargs.setdefault('max_length', None)
+        self._char_max_length = kwargs.pop('char_max_length', 255)
+        super().__init__(*args, strict=strict, **kwargs)
+
+    def get_prep_value(self, value):
+        return self._encrypt_value(value)
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
@@ -67,52 +68,11 @@ class EncryptedCharField(models.TextField):
         return name, path, args, kwargs
 
 
-class EncryptedTextField(models.TextField):
+class EncryptedTextField(EncryptedFieldMixin, models.TextField):
     description = 'AES-256-GCM encrypted TextField'
 
-    def __init__(self, *args, strict=False, **kwargs):
-        self._strict = strict
-        super().__init__(*args, **kwargs)
-
     def get_prep_value(self, value):
-        if value is None or value == '':
-            return value
-        try:
-            return FieldEncryptor.encrypt(str(value))
-        except EncryptionError:
-            if self._strict:
-                raise
-            return value
-
-    def from_db_value(self, value, expression, connection):
-        if value is None or value == '':
-            return value
-        try:
-            return FieldEncryptor.decrypt(value)
-        except DecryptionError:
-            if self._strict:
-                raise
-            return value
-        except Exception:
-            if self._strict:
-                raise
-            return value
-
-    def to_python(self, value):
-        if value is None or value == '':
-            return value
-        if isinstance(value, str) and PREFIX_SEPARATOR in value:
-            try:
-                return FieldEncryptor.decrypt(value)
-            except DecryptionError:
-                if self._strict:
-                    raise
-                return value
-            except Exception:
-                if self._strict:
-                    raise
-                return value
-        return value
+        return self._encrypt_value(value)
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()

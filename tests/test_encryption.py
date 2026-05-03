@@ -401,3 +401,45 @@ class TestFieldStrictMode(TestCase):
             tampered = 'v1:invalidbase64'
             result = field.to_python(tampered)
             self.assertEqual(result, tampered)
+
+
+class TestComputeHash(TestCase):
+    def test_compute_hash_returns_hex_string(self):
+        from django_field_encryption import compute_hash
+
+        result = compute_hash('test_value')
+        self.assertEqual(len(result), 64)
+        self.assertTrue(all(c in '0123456789abcdef' for c in result))
+
+    def test_compute_hash_is_deterministic(self):
+        from django_field_encryption import compute_hash
+
+        result1 = compute_hash('same_value')
+        result2 = compute_hash('same_value')
+        self.assertEqual(result1, result2)
+
+    def test_compute_hash_differs_for_different_values(self):
+        from django_field_encryption import compute_hash
+
+        result1 = compute_hash('value1')
+        result2 = compute_hash('value2')
+        self.assertNotEqual(result1, result2)
+
+
+@override_settings(**ENCRYPTION_SETTINGS)
+class TestEncryptedJSONFieldNonEncrypted(TestCase):
+    def test_from_db_value_returns_plain_value_when_not_encrypted(self):
+        from django_field_encryption import EncryptedJSONField, FieldEncryptor
+
+        FieldEncryptor.clear_cache()
+        field = EncryptedJSONField()
+        plain_dict = {'key': 'value'}
+        result = field.from_db_value(plain_dict, None, None)
+        self.assertEqual(result, plain_dict)
+
+    def test_from_db_value_returns_none_for_none(self):
+        from django_field_encryption import EncryptedJSONField
+
+        field = EncryptedJSONField()
+        result = field.from_db_value(None, None, None)
+        self.assertIsNone(result)

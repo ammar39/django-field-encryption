@@ -9,7 +9,7 @@ description = "Field-level encryption for Django using AES-256-GCM"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "" }]
+authors = [{ name = "Ammar" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: Django",
@@ -47,7 +47,7 @@ lint.flake8-quotes.inline-quotes = "single"
 [tool.ruff.format]
 quote-style = "single"
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["django_field_encryption"]
 
 [tool.pytest.ini_options]

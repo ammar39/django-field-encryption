@@ -1,5 +1,7 @@
 import base64
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .exceptions import ConfigurationError, InvalidKeyError
 
 PREFIX_SEPARATOR = ':'
@@ -11,7 +13,7 @@ def _get_keys_config() -> dict[str, str]:
         from django.conf import settings
 
         return getattr(settings, 'DATA_PROTECTION_KEYS', {})
-    except Exception:
+    except (ImproperlyConfigured, RuntimeError):
         return {}
 
 
@@ -22,15 +24,13 @@ def _get_active_key_id() -> str:
         key_id = getattr(settings, 'DATA_PROTECTION_ACTIVE_KEY_ID', None)
         if key_id:
             return key_id
-        keys = _get_keys_config()
-        if keys:
-            key_id = sorted(keys.keys())[-1]
-        return key_id or ''
-    except Exception:
-        keys = _get_keys_config()
-        if keys:
-            return sorted(keys.keys())[-1]
-        return ''
+    except (ImproperlyConfigured, RuntimeError):
+        pass
+
+    keys = _get_keys_config()
+    if keys:
+        return sorted(keys.keys())[-1]
+    return ''
 
 
 def _get_master_key(key_id: str) -> bytes:
