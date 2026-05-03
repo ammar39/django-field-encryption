@@ -1,0 +1,237 @@
+# Security Notes
+
+Important security considerations when using django-field-encryption.
+
+## Cryptographic Details
+
+### Algorithm
+
+- **Cipher**: AES-256-GCM (Galois/Counter Mode)
+- **Key derivation**: HKDF-SHA256
+- **Key size**: 256 bits (32 bytes)
+- **Nonce size**: 96 bits (12 bytes)
+- **Authentication tag**: 128 bits (16 bytes)
+
+### Key Derivation
+
+Field and file keys are derived separately using HKDF:
+
+```
+field_key = HKDF(
+    master_key,
+    salt = SHA256(key_id),
+    info = "data-protection-field-" + key_id
+)
+
+file_key = HKDF(
+    master_key,
+    salt = SHA256(key_id),
+    info = "data-protection-file-" + key_id
+)
+```
+
+This ensures:
+- Field encryption and file encryption use different keys
+- Each key version has a unique derived key
+- Compromise of one derived key doesn't affect others
+
+## Security Properties
+
+### Confidentiality
+
+- Data is encrypted with AES-256-GCM
+- Without the key, data is indistinguishable from random
+
+### Integrity
+
+- AES-GCM authentication detects tampering
+- Modified ciphertext fails decryption
+
+### Non-replay
+
+- Each encryption uses a unique random nonce
+- Same plaintext encrypts to different ciphertext
+
+## Best Practices
+
+### Key Management
+
+1. **Store keys securely**: Use environment variables or secrets management
+2. **Never commit keys**: Keys must never enter version control
+3. **Rotate keys**: Implement regular key rotation (90 days recommended)
+4. **Keep old keys**: Maintain previous keys for decryption
+5. **Audit key usage**: Log which key encrypts each value
+
+```python
+# Good: Environment variables
+DATA_PROTECTION_KEYS = {
+    'v1': os.environ.get('ENCRYPTION_KEY_V1'),
+}
+
+# Bad: Hardcoded key
+DATA_PROTECTION_KEYS = {
+    'v1': 'my-secret-key',  # Never do this
+}
+```
+
+### Key Rotation
+
+1. Add new key to DATA_PROTECTION_KEYS
+2. Set DATA_PROTECTION_ACTIVE_KEY_ID to new key
+3. Re-encrypt existing data using FieldEncryptor.rotate_value()
+4. Keep old key for decryption during transition
+
+```python
+# rotate_keys.py
+from django_field_encryption import FieldEncryptor
+
+def rotate_field(field_name):
+    Model = apps.get_model('app', 'Model')
+    for obj in Model.objects.all():
+        value = getattr(obj, field_name)
+        if value and FieldEncryptor.can_decrypt(value):
+            rotated = FieldEncryptor.rotate_value(value)
+            if rotated:
+                setattr(obj, field_name, rotated)
+                obj.save()
+```
+
+### Application Security
+
+1. **HTTPS**: Always use TLS in transit
+2. **Access control**: Restrict who can view decrypted data
+3. **Logging**: Never log decrypted sensitive data
+4. **Error handling**: Don't expose encrypted values in errors
+
+## Limitations
+
+### Data at Rest
+
+The library does **not** encrypt the database at rest. It encrypts data in transit from application to database:
+- Application → encrypted → Database
+- Database → encrypted → Application → decrypted
+
+The database stores encrypted values, not plaintext.
+
+### Memory Security
+
+- Decrypted data exists in memory
+- Clear sensitive data when no longer needed
+- Be aware of memory dumps and swap files
+
+### Query Limitations
+
+Encrypted fields cannot be used in queries:
+- No filtering by encrypted values
+- No searching within encrypted fields
+- No ordering by encrypted fields
+
+Use separate hash fields for lookups:
+
+```python
+from django_field_encryption import compute_hash
+
+class UserProfile(models.Model):
+    ssn = EncryptedCharField(max_length=20)
+    ssn_hash = models.CharField(max_length=64, db_index=True)
+    
+    def save(self, *args, **kwargs):
+        self.ssn_hash = compute_hash(self.ssn)
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def lookup_by_ssn(cls, ssn):
+        return cls.objects.get(ssn_hash=compute_hash(ssn))
+```
+
+### File Security
+
+- Files are encrypted on disk
+- Decrypted content exists in memory during access
+- Original filenames may contain sensitive info - consider renaming
+
+## Threat Model
+
+### Protected Against
+
+- Database compromise (values are encrypted)
+- Database backup compromise
+- Disk theft (files are encrypted)
+- SQL injection reading from database
+
+### Not Protected Against
+
+- Application compromise (decrypted data in memory)
+- Memory dumps
+- Debugger attached to application
+- Application logs containing sensitive data
+- Network eavesdropping (use TLS)
+- Insider threats with application access
+
+## Compliance
+
+### GDPR
+
+- Encryption supports data minimization principles
+- Keys can be rotated to limit exposure window
+- Document encryption in privacy policy
+
+### PCI-DSS
+
+- Credit card data can be encrypted
+- Use separate keys per environment
+- Key rotation required
+
+### HIPAA
+
+- PHI can be encrypted
+- Audit key access
+- Document encryption in BAA
+
+## Incident Response
+
+If keys are compromised:
+
+1. **Identify affected data**: Determine which fields/files use compromised key
+2. **Contain**: Switch to new key immediately
+3. **Assess**: Determine if data was accessed
+4. **Remediate**: Re-encrypt with new key
+5. **Document**: Report as required
+
+```python
+# Emergency key rotation
+DATA_PROTECTION_KEYS = {
+    'v1': 'OLD_COMPROMISED_KEY',  # Keep for now
+    'v2': 'NEW_SECURE_KEY',
+}
+DATA_PROTECTION_ACTIVE_KEY_ID = 'v2'
+
+# Re-encrypt all data
+for obj in Model.objects.all():
+    obj.secret = FieldEncryptor.rotate_value(obj.secret)
+    obj.save()
+```
+
+## Testing Security
+
+Use test keys in test environments:
+
+```python
+# settings_test.py
+DATA_PROTECTION_KEYS = {
+    'test': 'dGVzdGtleTZ0dzdzMna2V5Mm5rZnlqYW5rZnlqYW5rZnlqYW4=',  # Test key
+}
+DATA_PROTECTION_ACTIVE_KEY_ID = 'test'
+```
+
+Never use production keys in tests.
+
+## Dependencies
+
+The library depends on:
+
+- `cryptography>=42.0.0` - For AES-GCM and HKDF
+- `Django>=4.2` - For field/storage classes
+- Python 3.9+ - For typing features
+
+Keep these dependencies updated for security patches.

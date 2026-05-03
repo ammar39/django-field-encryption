@@ -1,0 +1,153 @@
+# Configuration
+
+Complete reference for django-field-encryption configuration options.
+
+## Settings
+
+### DATA_PROTECTION_KEYS
+
+Required dictionary mapping key IDs to master keys:
+
+```python
+DATA_PROTECTION_KEYS = {
+    'v1': 'base64-encoded-32-byte-key',
+    'v2': 'another-base64-key',
+}
+```
+
+Each key must be:
+- 32 bytes raw, or
+- 44 characters base64-encoded (represents 32 bytes)
+
+### DATA_PROTECTION_ACTIVE_KEY_ID
+
+The key ID used for new encryptions:
+
+```python
+DATA_PROTECTION_ACTIVE_KEY_ID = 'v1'
+```
+
+If not specified, the highest sorted key ID is used automatically.
+
+## Key Generation
+
+### generate_master_key()
+
+Generates a cryptographically secure master key:
+
+```python
+from django_field_encryption import generate_master_key
+
+key = generate_master_key()  # Returns base64-encoded 32-byte key
+```
+
+## Key Management
+
+### Multiple Keys and Rotation
+
+Store multiple key versions to support key rotation:
+
+```python
+DATA_PROTECTION_KEYS = {
+    'v1': 'old-key-base64...',
+    'v2': 'new-key-base64...',
+}
+DATA_PROTECTION_ACTIVE_KEY_ID = 'v2'
+```
+
+### rotate_value()
+
+Re-encrypt data with the active key:
+
+```python
+from django_field_encryption import FieldEncryptor
+
+# Re-encrypt a value with the current active key
+rotated = FieldEncryptor.rotate_value(old_encrypted_value)
+# Returns new encrypted value, or None if already using active key
+```
+
+Example migration script:
+
+```python
+# migrate_encryption.py
+from django_field_encryption import FieldEncryptor
+
+def rotate_all_field_values(model_class, field_names):
+    """Rotate encrypted fields to new key."""
+    for obj in model_class.objects.all():
+        for field_name in field_names:
+            value = getattr(obj, field_name)
+            if value and FieldEncryptor.can_decrypt(value):
+                rotated = FieldEncryptor.rotate_value(value)
+                if rotated:
+                    setattr(obj, field_name, rotated)
+        obj.save()
+```
+
+## Configuration Functions
+
+### get_keys_config()
+
+Returns all configured keys:
+
+```python
+from django_field_encryption import get_keys_config
+
+keys = get_keys_config()
+# Returns: {'v1': 'key1...', 'v2': 'key2...'}
+```
+
+### get_active_key_id()
+
+Returns the currently active key ID:
+
+```python
+from django_field_encryption import get_active_key_id
+
+active = get_active_key_id()
+# Returns: 'v1'
+```
+
+### get_master_key(key_id)
+
+Returns the raw 32-byte key for a given key ID:
+
+```python
+from django_field_encryption import get_master_key
+
+key = get_master_key('v1')
+# Returns: b'\x00\x01\x02...' (32 bytes)
+```
+
+## Key Caching
+
+The library caches derived keys in memory for performance. Clear the cache after changing configuration in tests:
+
+```python
+from django_field_encryption import FieldEncryptor, FileEncryptor
+
+FieldEncryptor.clear_cache()
+FileEncryptor.clear_cache()
+```
+
+## Environment Variables
+
+For production, consider loading keys from environment variables:
+
+```python
+import os
+
+DATA_PROTECTION_KEYS = {
+    'v1': os.environ.get('ENCRYPTION_KEY_V1'),
+}
+DATA_PROTECTION_ACTIVE_KEY_ID = 'v1'
+```
+
+## Best Practices
+
+1. **Store keys securely** - Use environment variables or secrets management
+2. **Rotate keys regularly** - Schedule key rotation every 90 days
+3. **Keep old keys** - Maintain previous keys for decryption during rotation
+4. **Audit key usage** - Log which key version encrypts each value
+5. **Never commit keys** - Never store keys in version control
