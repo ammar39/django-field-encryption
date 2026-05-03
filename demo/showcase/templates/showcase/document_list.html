@@ -1,0 +1,52 @@
+{% extends 'showcase/base.html' %}
+
+{% block title %}Documents - Django Field Encryption Demo{% endblock %}
+
+{% block content %}
+<h1>Documents</h1>
+
+<p>Files uploaded here are encrypted at rest using <strong>EncryptedFileStorage</strong>. They are automatically decrypted when downloaded.</p>
+
+<a href="{% url 'document_upload' %}" class="btn" style="margin-bottom: 1rem;">Upload New Document</a>
+
+{% if documents %}
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Filename</th>
+            <th>Description</th>
+            <th>Uploaded</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for doc in documents %}
+        <tr>
+            <td>{{ doc.title }}</td>
+            <td>{{ doc.file.name }}</td>
+            <td>{{ doc.description|truncatewords:10 }}</td>
+            <td>{{ doc.uploaded_at|date:"Y-m-d H:i" }}</td>
+            <td>
+                <a href="{% url 'document_download' doc.pk %}" class="btn">Download</a>
+                <a href="{% url 'document_delete' doc.pk %}" class="btn btn-danger">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No documents yet. <a href="{% url 'document_upload' %}">Upload one</a> to see file encryption in action.</p>
+{% endif %}
+
+<div class="card" style="margin-top: 2rem;">
+    <h3>How File Encryption Works</h3>
+    <ol>
+        <li>User uploads a file through the form</li>
+        <li><code>EncryptedFileStorage._save()</code> encrypts the file with AES-256-GCM</li>
+        <li>The encrypted file is stored on disk with a header containing the key ID and nonce</li>
+        <li>When downloaded, <code>EncryptedFileStorage._open()</code> decrypts the file transparently</li>
+        <li>The user receives the original, unencrypted file</li>
+    </ol>
+</div>
+{% endblock %}

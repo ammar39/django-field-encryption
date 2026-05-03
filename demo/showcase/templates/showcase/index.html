@@ -1,0 +1,45 @@
+{% extends 'showcase/base.html' %}
+
+{% block content %}
+<h1>Django Field Encryption Demo</h1>
+
+<p>This demo application showcases the <strong>django-field-encryption</strong> library with the following features:</p>
+
+<div class="stats">
+    <div class="stat-card">
+        <div class="number">{{ profile_count }}</div>
+        <div class="label-text">Profiles Created</div>
+    </div>
+    <div class="stat-card">
+        <div class="number">{{ document_count }}</div>
+        <div class="label-text">Documents Uploaded</div>
+    </div>
+    <div class="stat-card">
+        <div class="number">{{ available_keys|length }}</div>
+        <div class="label-text">Encryption Keys</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Active Encryption Key</h3>
+    <p><span class="label label-success">{{ active_key }}</span></p>
+    <p>Available keys: {% for key in available_keys %}<span class="label label-info">{{ key }}</span>{% if not forloop.last %} {% endif %}{% endfor %}</p>
+</div>
+
+<div class="card">
+    <h3>Features Demonstrated</h3>
+    <ul>
+        <li><strong>EncryptedCharField</strong> - Encrypts short text like SSNs, credit card numbers</li>
+        <li><strong>EncryptedTextField</strong> - Encrypts longer text content like notes</li>
+        <li><strong>EncryptedJSONField</strong> - Encrypts JSON data with automatic serialization</li>
+        <li><strong>EncryptedFileStorage</strong> - Encrypts uploaded files at rest using AES-256-GCM</li>
+        <li><strong>Key Rotation</strong> - Seamlessly rotate encryption keys without data migration</li>
+    </ul>
+</div>
+
+<div style="margin-top: 2rem;">
+    <a href="{% url 'profile_list' %}" class="btn">Manage Profiles</a>
+    <a href="{% url 'document_list' %}" class="btn">Manage Documents</a>
+    <a href="{% url 'key_rotation' %}" class="btn btn-success">Key Rotation Demo</a>
+</div>
+{% endblock %}

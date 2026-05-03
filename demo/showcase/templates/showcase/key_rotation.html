@@ -1,0 +1,104 @@
+{% extends 'showcase/base.html' %}
+
+{% block title %}Key Rotation Demo - Django Field Encryption Demo{% endblock %}
+
+{% block content %}
+<h1>Key Rotation Demo</h1>
+
+<p>This page demonstrates the key rotation capabilities of django-field-encryption. You can switch between encryption keys and re-encrypt existing data.</p>
+
+<div class="card">
+    <h3>Current Configuration</h3>
+    <p><strong>Active Key:</strong> <span class="label label-success">{{ active_key }}</span></p>
+    <p><strong>Available Keys:</strong> {% for key in available_keys %}<span class="label label-info">{{ key }}</span>{% if not forloop.last %} {% endif %}{% endfor %}</p>
+</div>
+
+<div class="card">
+    <h3>Switch Active Key</h3>
+    <p>Change which key is used for new encryptions. Existing data remains decryptable with the old key.</p>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="switch_key">
+        <p>
+            <select name="new_key">
+                {% for key in available_keys %}
+                <option value="{{ key }}" {% if key == active_key %}selected{% endif %}>{{ key }}</option>
+                {% endfor %}
+            </select>
+        </p>
+        <button type="submit" class="btn">Switch Active Key</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Rotate All Data</h3>
+    <p>Re-encrypt all profile data with the currently active key. This is useful when you want to deprecate an old key.</p>
+    <form method="post" onsubmit="return confirm('This will re-encrypt all profile data. Continue?');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="rotate_all">
+        <button type="submit" class="btn btn-success">Rotate All Profiles</button>
+    </form>
+</div>
+
+{% if key_analysis %}
+<div class="card">
+    <h3>Current Key Usage Analysis</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Profile</th>
+                <th>SSN Key</th>
+                <th>Notes Key</th>
+                <th>Preferences Key</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in key_analysis %}
+            <tr>
+                <td>{{ item.profile.name }}</td>
+                <td>
+                    {% if item.ssn_key == active_key %}
+                    <span class="label label-success">{{ item.ssn_key }}</span>
+                    {% else %}
+                    <span class="label label-warning">{{ item.ssn_key }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if item.notes_key == active_key %}
+                    <span class="label label-success">{{ item.notes_key }}</span>
+                    {% else %}
+                    <span class="label label-warning">{{ item.notes_key }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if item.prefs_key == active_key %}
+                    <span class="label label-success">{{ item.prefs_key }}</span>
+                    {% else %}
+                    <span class="label label-warning">{{ item.prefs_key }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p style="font-size: 13px; color: #666;">
+        <span class="label label-success">green</span> = using active key
+        <span class="label label-warning">yellow</span> = using different key (should be rotated)
+    </p>
+</div>
+{% else %}
+<p>No profiles to analyze. <a href="{% url 'profile_create' %}">Create some profiles</a> first.</p>
+{% endif %}
+
+<div class="card" style="margin-top: 2rem;">
+    <h3>How Key Rotation Works</h3>
+    <ol>
+        <li>Configure multiple keys in <code>DATA_PROTECTION_KEYS</code></li>
+        <li>Set <code>DATA_PROTECTION_ACTIVE_KEY_ID</code> to the new key</li>
+        <li>New data is automatically encrypted with the active key</li>
+        <li>Old data remains readable because old keys are still available</li>
+        <li>Call <code>FieldEncryptor.rotate_value()</code> to re-encrypt old data with the new key</li>
+        <li>Once all data is rotated, you can safely remove the old key</li>
+    </ol>
+</div>
+{% endblock %}

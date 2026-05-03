@@ -1,0 +1,5 @@
+{
+    "extraPaths": [".venv/lib/python3.12/site-packages", "lib/python3.12/site-packages"],
+    "typeCheckingMode": "basic",
+    "reportMissingTypeStubs": false
+}

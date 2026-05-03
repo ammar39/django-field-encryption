@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "django-field-encryption"
+version = "0.1.1"
+description = "Field-level encryption for Django using AES-256-GCM"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Django",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = ["cryptography>=5.0.0", "django>=4.2,<7.0"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-django", "ruff"]
+
+[project.urls]
+Homepage = "https://github.com/anomalyco/django-field-encryption"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["django_field_encryption*"]
+
+[tool.setuptools.package-data]
+django_field_encryption = ["py.typed"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+lint.select = ["E", "W", "F", "I", "N", "UP", "B", "C4", "T10", "Q"]
+lint.ignore = ["E501", "N802", "N803", "N806", "B008", "C901"]
+lint.flake8-quotes.inline-quotes = "single"
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.isort]
+known-first-party = ["django_field_encryption"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+testpaths = ["tests"]

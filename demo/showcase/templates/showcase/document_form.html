@@ -1,0 +1,26 @@
+{% extends 'showcase/base.html' %}
+
+{% block title %}Upload Document - Django Field Encryption Demo{% endblock %}
+
+{% block content %}
+<h1>Upload Document</h1>
+
+<p>Select a file to upload. It will be automatically encrypted before being saved to disk.</p>
+
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn">Upload & Encrypt</button>
+    <a href="{% url 'document_list' %}" class="btn" style="background: #666;">Cancel</a>
+</form>
+
+<div class="card" style="margin-top: 2rem;">
+    <h3>Try This</h3>
+    <p>Upload a text file with some content. Then:</p>
+    <ol>
+        <li>Look at the file in <code>demo/media/documents/</code> - it will be encrypted binary data</li>
+        <li>Download it back through this app - it will be decrypted automatically</li>
+        <li>Compare the downloaded file with the original - they should be identical</li>
+    </ol>
+</div>
+{% endblock %}

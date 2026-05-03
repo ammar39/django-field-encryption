@@ -1,0 +1,28 @@
+{% extends 'showcase/base.html' %}
+
+{% block title %}{{ title }} - Django Field Encryption Demo{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn">Save</button>
+    <a href="{% url 'profile_list' %}" class="btn" style="background: #666;">Cancel</a>
+</form>
+
+{% if title == 'Create Profile' %}
+<div class="card" style="margin-top: 2rem;">
+    <h3>Example Data</h3>
+    <p>You can use these sample values to test the encryption:</p>
+    <ul>
+        <li><strong>Name:</strong> John Doe</li>
+        <li><strong>Email:</strong> john@example.com</li>
+        <li><strong>SSN:</strong> 123-45-6789</li>
+        <li><strong>Notes:</strong> Some private notes that should be encrypted</li>
+        <li><strong>Preferences:</strong> {"theme": "dark", "notifications": true, "language": "en"}</li>
+    </ul>
+</div>
+{% endif %}
+{% endblock %}

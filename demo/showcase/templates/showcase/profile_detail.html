@@ -1,0 +1,40 @@
+{% extends 'showcase/base.html' %}
+
+{% block title %}{{ profile.name }} - Django Field Encryption Demo{% endblock %}
+
+{% block content %}
+<h1>Profile: {{ profile.name }}</h1>
+
+<div class="card">
+    <h3>Decrypted Data (What Django Sees)</h3>
+    <div class="field-row"><strong>Name:</strong> {{ profile.name }}</div>
+    <div class="field-row"><strong>Email:</strong> {{ profile.email }}</div>
+    <div class="field-row"><strong>SSN:</strong> {{ profile.ssn }}</div>
+    <div class="field-row"><strong>Notes:</strong> {{ profile.notes }}</div>
+    <div class="field-row"><strong>Preferences:</strong> {{ profile.preferences }}</div>
+    <div class="field-row"><strong>Created:</strong> {{ profile.created_at|date:"Y-m-d H:i:s" }}</div>
+</div>
+
+<div class="card">
+    <h3>Raw Encrypted Data (What's Stored in the Database)</h3>
+    <p style="color: #666; font-size: 14px;">This is what the data actually looks like in the database. It's encrypted with AES-256-GCM.</p>
+
+    <div class="field-row">
+        <strong>SSN (raw):</strong><br>
+        <code>{{ raw_ssn }}</code>
+    </div>
+    <div class="field-row">
+        <strong>Notes (raw):</strong><br>
+        <code>{{ raw_notes }}</code>
+    </div>
+    <div class="field-row">
+        <strong>Preferences (raw):</strong><br>
+        <code>{{ raw_preferences }}</code>
+    </div>
+</div>
+
+<div style="margin-top: 1rem;">
+    <a href="{% url 'profile_edit' profile.pk %}" class="btn">Edit</a>
+    <a href="{% url 'profile_list' %}" class="btn" style="background: #666;">Back to List</a>
+</div>
+{% endblock %}

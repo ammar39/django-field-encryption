@@ -1,0 +1,15 @@
+{% extends 'showcase/base.html' %}
+
+{% block title %}Confirm Delete - Django Field Encryption Demo{% endblock %}
+
+{% block content %}
+<h1>Confirm Delete</h1>
+
+<p>Are you sure you want to delete the document <strong>"{{ document.title }}"</strong>?</p>
+
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Yes, Delete</button>
+    <a href="{% url 'document_list' %}" class="btn" style="background: #666;">Cancel</a>
+</form>
+{% endblock %}
