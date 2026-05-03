@@ -1,0 +1,8 @@
+include README.md
+include pyproject.toml
+include LICENSE
+recursive-include django_field_encryption *.py *.typed
+global-exclude *.pyc
+global-exclude __pycache__
+prune tests
+prune demo

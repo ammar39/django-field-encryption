@@ -32,6 +32,7 @@ Homepage = "https://github.com/anomalyco/django-field-encryption"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["django_field_encryption*"]
+exclude = ["tests*", "demo*"]
 
 [tool.setuptools.package-data]
 django_field_encryption = ["py.typed"]
