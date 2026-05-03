@@ -236,7 +236,7 @@ wheels = [
 
 [[package]]
 name = "django-field-encryption"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -256,7 +256,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cryptography", specifier = "==47.0.0" },
+    { name = "cryptography", specifier = ">=5.0.0" },
     { name = "django", specifier = ">=4.2,<7.0" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-django", marker = "extra == 'dev'" },

@@ -24,7 +24,7 @@ classifiers = [
 dependencies = ["cryptography>=5.0.0", "django>=4.2,<7.0"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-django", "ruff"]
+dev = ["pytest", "pytest-django", "ruff", "twine"]
 
 [project.urls]
 Homepage = "https://github.com/anomalyco/django-field-encryption"
