@@ -24,6 +24,7 @@ from .fields import (
     EncryptedTextField,
 )
 from .storage import (
+    BaseEncryptedStorage,
     EncryptedFileStorage,
     encrypted_file_storage,
 )
@@ -41,6 +42,7 @@ __all__ = [
     'EncryptedCharField',
     'EncryptedTextField',
     'EncryptedJSONField',
+    'BaseEncryptedStorage',
     'EncryptedFileStorage',
     'encrypted_file_storage',
     'DecryptionError',
