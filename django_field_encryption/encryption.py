@@ -29,8 +29,11 @@ logger = logging.getLogger(__name__)
 FIELD_KEY_INFO_PREFIX = b'data-protection-field-'
 FILE_KEY_INFO_PREFIX = b'data-protection-file-'
 
+HASH_KEY_INFO_PREFIX = b'data-protection-hash-'
+
 _field_key_cache: dict[str, AESGCM] = {}
 _file_key_cache: dict[str, AESGCM] = {}
+_hash_key_cache: dict[str, bytes] = {}
 _cache_lock = threading.Lock()
 
 
@@ -53,17 +56,14 @@ class FieldEncryptor:
         with _cache_lock:
             if cache_key in _field_key_cache:
                 return _field_key_cache[cache_key]
-        master_key = _get_master_key(key_id)
-        derived = _derive_aes_key(master_key, key_id, info_prefix)
-        aesgcm = AESGCM(derived)
-        with _cache_lock:
+            master_key = _get_master_key(key_id)
+            derived = _derive_aes_key(master_key, key_id, info_prefix)
+            aesgcm = AESGCM(derived)
             _field_key_cache[cache_key] = aesgcm
-        return aesgcm
+            return aesgcm
 
     @classmethod
     def encrypt(cls, plaintext: str) -> str:
-        if not plaintext:
-            return plaintext
         key_id = _get_active_key_id()
         if not key_id:
             raise EncryptionNotConfiguredError(
@@ -155,17 +155,14 @@ class FileEncryptor:
         with _cache_lock:
             if cache_key in _file_key_cache:
                 return _file_key_cache[cache_key]
-        master_key = _get_master_key(key_id)
-        derived = _derive_aes_key(master_key, key_id, FILE_KEY_INFO_PREFIX)
-        aesgcm = AESGCM(derived)
-        with _cache_lock:
+            master_key = _get_master_key(key_id)
+            derived = _derive_aes_key(master_key, key_id, FILE_KEY_INFO_PREFIX)
+            aesgcm = AESGCM(derived)
             _file_key_cache[cache_key] = aesgcm
-        return aesgcm
+            return aesgcm
 
     @classmethod
     def encrypt(cls, data: bytes) -> tuple[bytes, str]:
-        if not data:
-            return b'', ''
         key_id = _get_active_key_id()
         if not key_id:
             raise EncryptionNotConfiguredError(
@@ -251,6 +248,30 @@ def generate_master_key() -> str:
     return base64.urlsafe_b64encode(os.urandom(32)).decode('ascii')
 
 
-def compute_hash(value: str) -> str:
-    """Compute a deterministic SHA-256 hash for indexing encrypted fields."""
-    return hashlib.sha256(value.encode('utf-8')).hexdigest()
+def _derive_hash_key(master_key: bytes, key_id: str) -> bytes:
+    cache_key = f'{key_id}:hash'
+    with _cache_lock:
+        if cache_key in _hash_key_cache:
+            return _hash_key_cache[cache_key]
+    derived = _derive_aes_key(master_key, key_id, HASH_KEY_INFO_PREFIX)
+    with _cache_lock:
+        _hash_key_cache[cache_key] = derived
+    return derived
+
+
+def compute_hash(value: str, key_id: Optional[str] = None) -> str:
+    """Compute a deterministic HMAC-SHA256 hash for indexing encrypted fields.
+
+    Uses a key derived from the master key via HKDF, preventing rainbow-table
+    attacks on structured data like national IDs.
+    """
+    if key_id is None:
+        key_id = _get_active_key_id()
+    if not key_id:
+        raise EncryptionNotConfiguredError(
+            'No active encryption key configured. '
+            'Set DATA_PROTECTION_ACTIVE_KEY_ID in settings or pass key_id explicitly.'
+        )
+    master_key = _get_master_key(key_id)
+    hash_key = _derive_hash_key(master_key, key_id)
+    return hashlib.sha256(hash_key + value.encode('utf-8')).hexdigest()

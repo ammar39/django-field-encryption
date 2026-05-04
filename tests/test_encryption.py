@@ -1,5 +1,6 @@
 import base64
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 
 TEST_MASTER_KEY = base64.urlsafe_b64encode(b'\x01' * 32).decode()
@@ -27,8 +28,12 @@ class TestFieldEncryptor(TestCase):
         decrypted = self.encryptor.decrypt(encrypted)
         self.assertEqual(decrypted, plaintext)
 
-    def test_encrypt_empty_string(self):
-        self.assertEqual(self.encryptor.encrypt(''), '')
+    def test_encrypt_empty_string_produces_ciphertext(self):
+        encrypted = self.encryptor.encrypt('')
+        self.assertNotEqual(encrypted, '')
+        self.assertTrue(encrypted.startswith('v1:'))
+        decrypted = self.encryptor.decrypt(encrypted)
+        self.assertEqual(decrypted, '')
 
     def test_decrypt_empty_string(self):
         self.assertEqual(self.encryptor.decrypt(''), '')
@@ -104,8 +109,9 @@ class TestFieldEncryptorKeyRotation(TestCase):
         self.encryptor.clear_cache()
         rotated = self.encryptor.rotate_value(encrypted_v1)
         self.assertIsNotNone(rotated)
-        self.assertTrue(rotated and rotated.startswith('v2:'))
-        self.assertEqual(self.encryptor.decrypt(rotated), 'rotation_test')  # type: ignore[arg-type]
+        assert rotated is not None
+        self.assertTrue(rotated.startswith('v2:'))
+        self.assertEqual(self.encryptor.decrypt(rotated), 'rotation_test')
 
     def test_rotate_value_no_change_if_same_key(self):
         encrypted = self.encryptor.encrypt('same_key_test')
@@ -154,12 +160,29 @@ class TestEncryptedCharField(TestCase):
         python_value = field.to_python(prep_value)
         self.assertEqual(python_value, original)
 
-    def test_encrypted_char_field_empty(self):
+    def test_encrypted_char_field_empty_string_encrypted(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        prep_value = field.get_prep_value('')
+        self.assertNotEqual(prep_value, '')
+        self.assertTrue(prep_value.startswith('v1:'))
+        python_value = field.to_python(prep_value)
+        self.assertEqual(python_value, '')
+
+    def test_encrypted_char_field_none(self):
         from django_field_encryption import EncryptedCharField
 
         field = EncryptedCharField()
         self.assertIsNone(field.get_prep_value(None))
-        self.assertEqual(field.get_prep_value(''), '')
+
+    def test_encrypted_char_field_max_length_validation(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField(char_max_length=5)
+        field.run_validators('12345')
+        with self.assertRaises(ValidationError):
+            field.run_validators('123456')
 
     def test_encrypted_text_field_roundtrip(self):
         from django_field_encryption import EncryptedTextField
@@ -183,6 +206,20 @@ class TestEncryptedCharField(TestCase):
         python_value = field.to_python(prep_value)
         self.assertEqual(python_value, original)
 
+    def test_encrypted_json_field_none(self):
+        from django_field_encryption import EncryptedJSONField
+
+        field = EncryptedJSONField()
+        self.assertIsNone(field.get_prep_value(None))
+
+    def test_encrypted_json_field_empty_dict(self):
+        from django_field_encryption import EncryptedJSONField
+
+        field = EncryptedJSONField()
+        prep_value = field.get_prep_value({})
+        self.assertTrue(prep_value.startswith('v1:'))
+        python_value = field.to_python(prep_value)
+        self.assertEqual(python_value, {})
 
 
 @override_settings(**ENCRYPTION_SETTINGS)
@@ -403,7 +440,13 @@ class TestFieldStrictMode(TestCase):
             self.assertEqual(result, tampered)
 
 
+@override_settings(**ENCRYPTION_SETTINGS)
 class TestComputeHash(TestCase):
+    def setUp(self):
+        from django_field_encryption import FieldEncryptor
+
+        FieldEncryptor.clear_cache()
+
     def test_compute_hash_returns_hex_string(self):
         from django_field_encryption import compute_hash
 
@@ -424,6 +467,29 @@ class TestComputeHash(TestCase):
         result1 = compute_hash('value1')
         result2 = compute_hash('value2')
         self.assertNotEqual(result1, result2)
+
+    def test_compute_hash_is_keyed_not_raw_sha256(self):
+        import hashlib
+
+        from django_field_encryption import compute_hash
+
+        result = compute_hash('test_value')
+        raw_sha256 = hashlib.sha256(b'test_value').hexdigest()
+        self.assertNotEqual(result, raw_sha256)
+
+    def test_compute_hash_without_config_raises_error(self):
+        from django_field_encryption import FieldEncryptor, compute_hash
+        from django_field_encryption.exceptions import EncryptionNotConfiguredError
+
+        FieldEncryptor.clear_cache()
+        no_keys_settings = {
+            'DATA_PROTECTION_KEYS': {},
+            'DATA_PROTECTION_ACTIVE_KEY_ID': None,
+        }
+        with override_settings(**no_keys_settings):
+            FieldEncryptor.clear_cache()
+            with self.assertRaises(EncryptionNotConfiguredError):
+                compute_hash('test_value')
 
 
 @override_settings(**ENCRYPTION_SETTINGS)

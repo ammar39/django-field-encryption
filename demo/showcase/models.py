@@ -2,8 +2,8 @@ from django.db import models
 
 from django_field_encryption import (
     EncryptedCharField,
-    EncryptedTextField,
     EncryptedJSONField,
+    EncryptedTextField,
     encrypted_file_storage,
 )
 

@@ -1,12 +1,20 @@
 import io
 
 from django.core.files.base import ContentFile, File
-from django.core.files.storage import FileSystemStorage
+from django.core.files.storage import FileSystemStorage, Storage
 
 from .encryption import FileEncryptor
 
 
-class EncryptedFileStorage(FileSystemStorage):
+class BaseEncryptedStorage(Storage):
+    """Encryption wrapper that works with any Django storage backend."""
+
+    def __init__(self, underlying_storage=None, **kwargs):
+        if underlying_storage is None:
+            underlying_storage = FileSystemStorage(**kwargs)
+        self._storage = underlying_storage
+        super().__init__()
+
     def _save(self, name, content):
         raw_data = content.read()
         if isinstance(raw_data, str):
@@ -14,10 +22,10 @@ class EncryptedFileStorage(FileSystemStorage):
         encrypted_data, _key_id = FileEncryptor.encrypt(raw_data)
         encrypted_content = ContentFile(encrypted_data)
         encrypted_content.name = content.name if hasattr(content, 'name') else name
-        return super()._save(name, encrypted_content)
+        return self._storage._save(name, encrypted_content)
 
     def _open(self, name, mode='rb'):
-        storage_file = super()._open(name, mode)
+        storage_file = self._storage._open(name, mode)
         raw_data = storage_file.read()
         decrypted_data = FileEncryptor.decrypt(raw_data)
         buf = io.BytesIO(decrypted_data)
@@ -26,9 +34,51 @@ class EncryptedFileStorage(FileSystemStorage):
     def is_encrypted(self, name):
         if not self.exists(name):
             return False
-        with super()._open(name) as f:
+        with self._storage._open(name) as f:
             header = f.read(4)
         return FileEncryptor.is_encrypted(header)
+
+    def exists(self, name):
+        return self._storage.exists(name)
+
+    def delete(self, name):
+        return self._storage.delete(name)
+
+    def url(self, name):
+        return self._storage.url(name)
+
+    def get_valid_name(self, name):
+        return self._storage.get_valid_name(name)
+
+    def get_available_name(self, name, max_length=None):
+        return self._storage.get_available_name(name, max_length)
+
+    def generate_filename(self, filename):
+        return self._storage.generate_filename(filename)
+
+    @property
+    def base_location(self):
+        return getattr(self._storage, 'base_location', '')
+
+    @property
+    def location(self):
+        return getattr(self._storage, 'location', '')
+
+    @property
+    def path(self):
+        if hasattr(self._storage, 'path'):
+            return self._storage.path
+        raise NotImplementedError(
+            f'{self._storage.__class__.__name__} does not support path()'
+        )
+
+
+class EncryptedFileStorage(BaseEncryptedStorage):
+    """Encrypted storage backed by the local filesystem."""
+
+    def __init__(self, **kwargs):
+        underlying = FileSystemStorage(**kwargs)
+        super().__init__(underlying_storage=underlying)
 
 
 encrypted_file_storage = EncryptedFileStorage()

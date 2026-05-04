@@ -27,6 +27,13 @@ class TestFileEncryptor(TestCase):
         decrypted = self.encryptor.decrypt(encrypted)
         self.assertEqual(decrypted, plaintext)
 
+    def test_encrypt_empty_bytes_produces_ciphertext(self):
+        encrypted, key_id = self.encryptor.encrypt(b'')
+        self.assertEqual(key_id, 'v1')
+        self.assertTrue(encrypted.startswith(b'ENC2'))
+        decrypted = self.encryptor.decrypt(encrypted)
+        self.assertEqual(decrypted, b'')
+
     def test_is_encrypted_true(self):
         plaintext = b'test'
         encrypted, _ = self.encryptor.encrypt(plaintext)
@@ -40,13 +47,8 @@ class TestFileEncryptor(TestCase):
         plaintext = b'not encrypted content'
         self.assertEqual(self.encryptor.decrypt(plaintext), plaintext)
 
-    def test_encrypt_empty_bytes(self):
-        encrypted, key_id = self.encryptor.encrypt(b'')
-        decrypted = self.encryptor.decrypt(encrypted)
-        self.assertEqual(decrypted, b'')
-
     def test_large_file_roundtrip(self):
-        plaintext = os.urandom(1024 * 1024)  # 1MB
+        plaintext = os.urandom(1024 * 1024)
         encrypted, _ = self.encryptor.encrypt(plaintext)
         decrypted = self.encryptor.decrypt(encrypted)
         self.assertEqual(decrypted, plaintext)
@@ -68,6 +70,44 @@ class TestEncryptedFileStorage(TestCase):
         self.assertEqual(retrieved, original_content)
 
         encrypted_file_storage.delete(saved_name)
+
+    def test_storage_empty_file_roundtrip(self):
+        from django.core.files.base import ContentFile
+
+        from django_field_encryption import encrypted_file_storage
+
+        original_content = b''
+        content = ContentFile(original_content, name='empty.txt')
+        saved_name = encrypted_file_storage._save('files/test/empty.txt', content)
+
+        with encrypted_file_storage._open(saved_name) as f:
+            retrieved = f.read()
+        self.assertEqual(retrieved, original_content)
+
+        encrypted_file_storage.delete(saved_name)
+
+
+@override_settings(**ENCRYPTION_SETTINGS)
+class TestBaseEncryptedStorage(TestCase):
+    def test_base_storage_with_custom_underlying(self):
+        from django.core.files.storage import FileSystemStorage
+
+        from django_field_encryption.storage import BaseEncryptedStorage
+
+        underlying = FileSystemStorage(location='/tmp/test_encrypted_storage')
+        storage = BaseEncryptedStorage(underlying_storage=underlying)
+
+        from django.core.files.base import ContentFile
+
+        original = b'base storage test'
+        content = ContentFile(original, name='test.bin')
+        saved = storage._save('test.bin', content)
+
+        with storage._open(saved) as f:
+            retrieved = f.read()
+        self.assertEqual(retrieved, original)
+
+        storage.delete(saved)
 
 
 @override_settings(**ENCRYPTION_SETTINGS)
