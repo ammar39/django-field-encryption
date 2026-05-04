@@ -1,5 +1,8 @@
 # django-field-encryption
 
+[![PyPI](https://img.shields.io/pypi/v/django-field-encryption.svg)](https://pypi.org/project/django-field-encryption/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-field-encryption.svg)](https://pypi.org/project/django-field-encryption/)
+
 Field-level and file encryption for Django using AES-256-GCM with automatic key rotation support.
 
 ## Features
