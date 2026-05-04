@@ -3,8 +3,9 @@ from typing import Any
 
 from django.core.validators import MaxLengthValidator
 from django.db import models
+from django.db.models.signals import pre_save
 
-from .encryption import PREFIX_SEPARATOR, FieldEncryptor
+from .encryption import PREFIX_SEPARATOR, FieldEncryptor, compute_hash
 from .exceptions import DecryptionError, EncryptionError
 
 
@@ -141,3 +142,40 @@ class EncryptedJSONField(EncryptedFieldMixin, models.TextField):
         if self._strict:
             kwargs['strict'] = self._strict
         return name, path, args, kwargs
+
+
+class BlindIndexField(models.CharField):
+    """Auto-computed HMAC-SHA256 index for an encrypted field.
+
+    Enables unique lookups on encrypted data without decrypting.
+
+    Usage:
+        class UserProfile(models.Model):
+            email = EncryptedCharField(max_length=255)
+            email_hash = BlindIndexField('email', unique=True, db_index=True)
+    """
+
+    def __init__(self, source_field: str, **kwargs: Any):
+        kwargs.setdefault('max_length', 64)
+        kwargs.setdefault('editable', False)
+        self._source_field = source_field
+        super().__init__(**kwargs)
+
+    def contribute_to_class(self, cls, name, **kwargs: Any):
+        super().contribute_to_class(cls, name, **kwargs)
+        pre_save.connect(self._compute_hash, sender=cls)
+
+    def _compute_hash(self, sender, instance, **kwargs: Any):
+        source_value = getattr(instance, self._source_field, None)
+        if source_value is None or source_value == '':
+            setattr(instance, self.attname or '', None)
+            return
+        hash_value = compute_hash(str(source_value))
+        setattr(instance, self.attname or '', hash_value)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+        args = (self._source_field,) + tuple(args)
+        kwargs.pop('max_length', None)
+        kwargs.pop('editable', None)
+        return name, path, list(args), kwargs

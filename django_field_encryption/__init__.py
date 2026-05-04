@@ -19,6 +19,7 @@ from .exceptions import (
     InvalidKeyError,
 )
 from .fields import (
+    BlindIndexField,
     EncryptedCharField,
     EncryptedJSONField,
     EncryptedTextField,
@@ -42,6 +43,7 @@ __all__ = [
     'EncryptedCharField',
     'EncryptedTextField',
     'EncryptedJSONField',
+    'BlindIndexField',
     'BaseEncryptedStorage',
     'EncryptedFileStorage',
     'encrypted_file_storage',
