@@ -52,6 +52,74 @@ This ensures:
 - Each encryption uses a unique random nonce
 - Same plaintext encrypts to different ciphertext
 
+### Nonce Uniqueness and Birthday Bound
+
+AES-GCM requires that every nonce be unique under a given key. This library
+uses `os.urandom(12)` to generate random 96-bit nonces. While the probability
+of collision is extremely low for small datasets, the **birthday bound** means
+collision risk becomes non-negligible at scale:
+
+| Encryptions per key | Approximate collision probability |
+|---------------------|-----------------------------------|
+| 10⁶ (1M)           | ~10⁻¹⁶ (negligible)              |
+| 10⁹ (1B)           | ~10⁻¹⁰ (still negligible)        |
+| 2³² (~4.3B)        | ~10⁻⁸ (NIST recommended limit)   |
+| 2⁴⁸                | ~50% (birthday bound)            |
+
+**Nonce reuse under the same key is catastrophic** — it breaks both
+confidentiality and authenticity of AES-GCM.
+
+#### Mitigation
+
+- **HKDF domain separation**: Field keys and file keys are derived separately,
+  so the encryption count is split across domains, not shared.
+- **Key rotation**: For high-volume applications (millions of records), rotate
+  encryption keys before reaching 2³² encryptions per key_id. This resets the
+  nonce counter space.
+- **Monitor scale**: If your application encrypts >10⁶ fields per day, consider
+  rotating keys quarterly or sooner.
+
+#### Recommendation
+
+For most applications, random nonces are safe. If you need deterministic nonce
+generation (e.g., counter-based), you would need to implement a nonce tracking
+layer — this library does not provide that.
+
+### Blind Index Security
+
+`BlindIndexField` uses HMAC-SHA256 with a key derived via HKDF from the master
+key. This provides:
+
+- **Deterministic hashing**: Same input always produces the same hash
+- **Keyed hashing**: Without the key, hashes cannot be reverse-engineered
+- **No rainbow table attacks**: Each key_id produces different hashes
+
+#### Key Rotation Impact
+
+Blind index hashes are tied to the encryption key. When you rotate keys:
+- **Encrypted data**: Old ciphertext remains decryptable with old keys
+- **Hash fields**: Old hashes become invalid for the new key
+
+After key rotation, you must re-compute all hash fields:
+
+```python
+for obj in Model.objects.all():
+    obj.hash_field = compute_hash(obj.encrypted_field)
+    obj.save()
+```
+
+#### Collision Risk
+
+HMAC-SHA256 produces a 256-bit output. Collision probability is negligible
+(~2⁻¹²⁸ birthday bound) even at massive scale. No practical concern.
+
+#### When to Use Blind Indexes
+
+- **Use for**: Exact-match lookups (email, SSN, national ID)
+- **Do not use for**: Range queries, partial matches, or ordering
+- **Do not use for**: Low-entropy fields without `unique=True` — an attacker
+  with database access could enumerate possible values and match hashes
+
 ## Best Practices
 
 ### Key Management
@@ -126,22 +194,26 @@ Encrypted fields cannot be used in queries:
 - No searching within encrypted fields
 - No ordering by encrypted fields
 
-Use separate hash fields for lookups:
+Use `BlindIndexField` for lookups:
 
 ```python
-from django_field_encryption import compute_hash
+from django_field_encryption import EncryptedCharField, BlindIndexField, compute_hash
 
 class UserProfile(models.Model):
     ssn = EncryptedCharField(max_length=20)
-    ssn_hash = models.CharField(max_length=64, db_index=True)
-    
-    def save(self, *args, **kwargs):
-        self.ssn_hash = compute_hash(self.ssn)
-        super().save(*args, **kwargs)
-    
-    @classmethod
-    def lookup_by_ssn(cls, ssn):
-        return cls.objects.get(ssn_hash=compute_hash(ssn))
+    ssn_hash = BlindIndexField('ssn', db_index=True)
+
+# Lookup
+UserProfile.objects.get(ssn_hash=compute_hash('29901012345678'))
+```
+
+**Bulk operations limitation**: `bulk_create` and `bulk_update` do not fire `pre_save` signals. Hashes must be computed manually:
+
+```python
+profiles = [UserProfile(email='a@x.com'), UserProfile(email='b@x.com')]
+for p in profiles:
+    p.email_hash = compute_hash(p.email)
+UserProfile.objects.bulk_create(profiles)
 ```
 
 ### File Security

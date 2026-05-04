@@ -193,6 +193,24 @@ hash_value = compute_hash('29901012345678')
 # Returns: 64-character hex string
 ```
 
+### BlindIndexField
+
+Enable unique lookups on encrypted fields without decrypting:
+
+```python
+from django_field_encryption import EncryptedCharField, BlindIndexField
+
+class UserProfile(models.Model):
+    email = EncryptedCharField(max_length=255)
+    email_hash = BlindIndexField('email', unique=True, db_index=True)
+
+# Lookup by hash
+from django_field_encryption import compute_hash
+user = UserProfile.objects.get(email_hash=compute_hash('user@example.com'))
+```
+
+The hash is auto-computed on save via a `pre_save` signal. Note that `bulk_create` and `bulk_update` do not trigger signals — hashes must be computed manually for bulk operations.
+
 ### generate_master_key
 
 Generate a cryptographically secure master key:
@@ -235,9 +253,10 @@ master_key = get_master_key('v1') # Returns raw 32-byte key for key_id
 
 - Keys are 32 bytes (256 bits) for AES-256
 - Uses AES-GCM (Galois/Counter Mode) for authenticated encryption
-- Each encryption generates a unique 12-byte nonce
+- Each encryption generates a unique 12-byte random nonce
 - Field and file keys are derived separately using HKDF
 - The library does not encrypt at rest - data is encrypted/decrypted in memory only
+- **High-volume deployments**: Rotate keys before reaching ~2³² encryptions per key to avoid nonce collision risk. See [docs/security.md](docs/security.md) for details.
 
 ## License
 
