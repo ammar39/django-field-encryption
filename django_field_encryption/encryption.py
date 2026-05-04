@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import hmac
 import logging
 import os
 import threading
@@ -260,11 +261,7 @@ def _derive_hash_key(master_key: bytes, key_id: str) -> bytes:
 
 
 def compute_hash(value: str, key_id: Optional[str] = None) -> str:
-    """Compute a deterministic HMAC-SHA256 hash for indexing encrypted fields.
-
-    Uses a key derived from the master key via HKDF, preventing rainbow-table
-    attacks on structured data like national IDs.
-    """
+    """Compute a deterministic HMAC-SHA256 hash for indexing encrypted fields."""
     if key_id is None:
         key_id = _get_active_key_id()
     if not key_id:
@@ -274,4 +271,4 @@ def compute_hash(value: str, key_id: Optional[str] = None) -> str:
         )
     master_key = _get_master_key(key_id)
     hash_key = _derive_hash_key(master_key, key_id)
-    return hashlib.sha256(hash_key + value.encode('utf-8')).hexdigest()
+    return hmac.new(hash_key, value.encode('utf-8'), hashlib.sha256).hexdigest()

@@ -509,3 +509,116 @@ class TestEncryptedJSONFieldNonEncrypted(TestCase):
         field = EncryptedJSONField()
         result = field.from_db_value(None, None, None)
         self.assertIsNone(result)
+
+
+@override_settings(**ENCRYPTION_SETTINGS)
+class TestBlindIndexField(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from django.db import connection, models
+
+        from django_field_encryption import (
+            BlindIndexField,
+            EncryptedCharField,
+            FieldEncryptor,
+        )
+
+        FieldEncryptor.clear_cache()
+
+        class UserProfile(models.Model):
+            email = EncryptedCharField(max_length=255, null=True, blank=True)
+            email_hash = BlindIndexField(
+                'email', unique=True, db_index=True, null=True, blank=True
+            )
+
+            class Meta:
+                app_label = 'tests'
+
+        cls.UserProfile = UserProfile
+
+        with connection.schema_editor() as schema_editor:
+            schema_editor.create_model(UserProfile)
+
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        pass
+
+    def test_hash_auto_computed_on_save(self):
+        from django_field_encryption import compute_hash
+
+        profile = self.UserProfile.objects.create(email='user@example.com')
+        profile.refresh_from_db()
+        expected_hash = compute_hash('user@example.com')
+        self.assertEqual(profile.email_hash, expected_hash)
+
+    def test_hash_is_deterministic(self):
+        from django_field_encryption import compute_hash
+
+        profile = self.UserProfile.objects.create(email='deterministic@example.com')
+        profile.refresh_from_db()
+        self.assertEqual(profile.email_hash, compute_hash('deterministic@example.com'))
+
+    def test_hash_differs_for_different_values(self):
+        profile1 = self.UserProfile.objects.create(email='a@example.com')
+        profile2 = self.UserProfile.objects.create(email='b@example.com')
+        self.assertNotEqual(profile1.email_hash, profile2.email_hash)
+
+    def test_hash_is_none_for_none_source(self):
+        profile = self.UserProfile.objects.create(email=None)
+        profile.refresh_from_db()
+        self.assertIsNone(profile.email_hash)
+
+    def test_hash_is_none_for_empty_string_source(self):
+        profile = self.UserProfile.objects.create(email='')
+        profile.refresh_from_db()
+        self.assertIsNone(profile.email_hash)
+
+    def test_unique_constraint_enforced(self):
+        from django.db import IntegrityError
+
+        self.UserProfile.objects.create(email='unique@example.com')
+        with self.assertRaises(IntegrityError):
+            self.UserProfile.objects.create(email='unique@example.com')
+
+    def test_lookup_by_hash(self):
+        from django_field_encryption import compute_hash
+
+        self.UserProfile.objects.create(email='lookup@example.com')
+        found = self.UserProfile.objects.get(
+            email_hash=compute_hash('lookup@example.com')
+        )
+        self.assertEqual(found.email, 'lookup@example.com')
+
+    def test_hash_updates_on_email_change(self):
+        from django_field_encryption import compute_hash
+
+        profile = self.UserProfile.objects.create(email='old@example.com')
+        profile.email = 'new@example.com'
+        profile.save()
+        profile.refresh_from_db()
+        self.assertEqual(profile.email_hash, compute_hash('new@example.com'))
+
+    def test_deconstruct_for_migrations(self):
+        from django_field_encryption import BlindIndexField
+
+        field = BlindIndexField('email', unique=True, db_index=True)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(args[0], 'email')
+        self.assertNotIn('max_length', kwargs)
+        self.assertNotIn('editable', kwargs)
+        self.assertTrue(kwargs.get('unique'))
+        self.assertTrue(kwargs.get('db_index'))
+
+    def test_field_not_editable_by_default(self):
+        from django_field_encryption import BlindIndexField
+
+        field = BlindIndexField('email')
+        self.assertFalse(field.editable)
+
+    def test_default_max_length_is_64(self):
+        from django_field_encryption import BlindIndexField
+
+        field = BlindIndexField('email')
+        self.assertEqual(field.max_length, 64)
