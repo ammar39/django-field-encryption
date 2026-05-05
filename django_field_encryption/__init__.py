@@ -1,3 +1,4 @@
+from .admin import EncryptedFieldAdminMixin, EncryptedSearchMixin
 from .conf import (
     NONCE_LENGTH,
     PREFIX_SEPARATOR,
@@ -52,4 +53,6 @@ __all__ = [
     'EncryptionNotConfiguredError',
     'InvalidKeyError',
     'ConfigurationError',
+    'EncryptedFieldAdminMixin',
+    'EncryptedSearchMixin',
 ]
