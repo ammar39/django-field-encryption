@@ -1,14 +1,12 @@
-import json
-
-from django.shortcuts import render, get_object_or_404, redirect
-from django.http import FileResponse
-from django.contrib import messages
 from django.conf import settings
+from django.contrib import messages
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404, redirect, render
 
 from django_field_encryption import FieldEncryptor
 
-from .models import Profile, Document
-from .forms import ProfileForm, DocumentForm
+from .forms import DocumentForm, ProfileForm
+from .models import Document, Profile
 
 
 def index(request):

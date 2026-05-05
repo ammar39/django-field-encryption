@@ -32,8 +32,11 @@
         <li><strong>EncryptedCharField</strong> - Encrypts short text like SSNs, credit card numbers</li>
         <li><strong>EncryptedTextField</strong> - Encrypts longer text content like notes</li>
         <li><strong>EncryptedJSONField</strong> - Encrypts JSON data with automatic serialization</li>
+        <li><strong>BlindIndexField</strong> - Enables searchable queries on encrypted email via hash</li>
         <li><strong>EncryptedFileStorage</strong> - Encrypts uploaded files at rest using AES-256-GCM</li>
         <li><strong>Key Rotation</strong> - Seamlessly rotate encryption keys without data migration</li>
+        <li><strong>Django Admin Integration</strong> - <code>EncryptedFieldAdminMixin</code> masks encrypted fields in list views and excludes them from search; <code>EncryptedSearchMixin</code> enables search via blind index</li>
+        <li><strong><code>encrypt_field</code> command</strong> - Encrypt/decrypt field values from the CLI with <code>--dry-run</code> and <code>--batch-size</code> support</li>
     </ul>
 </div>
 
@@ -41,5 +44,6 @@
     <a href="{% url 'profile_list' %}" class="btn">Manage Profiles</a>
     <a href="{% url 'document_list' %}" class="btn">Manage Documents</a>
     <a href="{% url 'key_rotation' %}" class="btn btn-success">Key Rotation Demo</a>
+    <a href="/admin/" class="btn" style="background: #8e44ad;">Django Admin</a>
 </div>
 {% endblock %}

@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Profile, Document
+from .models import Document, Profile
 
 
 class ProfileForm(forms.ModelForm):
@@ -26,8 +26,8 @@ class ProfileForm(forms.ModelForm):
 
             try:
                 return json.loads(data)
-            except json.JSONDecodeError:
-                raise forms.ValidationError('Invalid JSON format')
+            except json.JSONDecodeError as err:
+                raise forms.ValidationError('Invalid JSON format') from err
         return data
 
 

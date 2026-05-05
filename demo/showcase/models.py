@@ -1,10 +1,11 @@
 from django.db import models
 
 from django_field_encryption import (
+    BlindIndexField,
     EncryptedCharField,
+    EncryptedFileStorage,
     EncryptedJSONField,
     EncryptedTextField,
-    encrypted_file_storage,
 )
 
 
@@ -14,6 +15,7 @@ class Profile(models.Model):
     ssn = EncryptedCharField(
         max_length=20, help_text='Social Security Number (encrypted)'
     )
+    ssn_hash = BlindIndexField('ssn', unique=True, db_index=True)
     notes = EncryptedTextField(blank=True, help_text='Private notes (encrypted)')
     preferences = EncryptedJSONField(
         default=dict,
@@ -32,7 +34,7 @@ class Profile(models.Model):
 class Document(models.Model):
     title = models.CharField(max_length=200)
     file = models.FileField(
-        storage=encrypted_file_storage,
+        storage=EncryptedFileStorage,
         upload_to='documents/%Y/%m/',
         help_text='Uploaded file will be encrypted at rest',
     )
