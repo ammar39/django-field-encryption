@@ -138,6 +138,155 @@ class Document(models.Model):
     file = models.FileField(storage=encrypted_file_storage)
 ```
 
+## Migrations
+
+### Adding encryption to a field
+
+Adding encryption requires three migrations: add the encrypted column, backfill with encrypted data, then remove the old column.
+
+**1. Add the encrypted field alongside the plaintext field:**
+
+```python
+class UserProfile(models.Model):
+    ssn = models.CharField(max_length=20)
+    ssn_encrypted = EncryptedCharField(max_length=20, null=True, blank=True)
+```
+
+```bash
+python manage.py makemigrations myapp && python manage.py migrate myapp
+```
+
+**2. Backfill encrypted data:**
+
+```bash
+python manage.py makemigrations --empty myapp --name encrypt_ssn
+```
+
+Edit the migration:
+
+```python
+from django.db import migrations
+from django_field_encryption import FieldEncryptor
+
+
+def encrypt_ssn(apps, schema_editor):
+    UserProfile = apps.get_model('myapp', 'UserProfile')
+    for obj in UserProfile.objects.iterator():
+        if obj.ssn:
+            obj.ssn_encrypted = FieldEncryptor.encrypt(obj.ssn)
+            obj.save(update_fields=['ssn_encrypted'])
+
+
+def reverse_encrypt_ssn(apps, schema_editor):
+    UserProfile = apps.get_model('myapp', 'UserProfile')
+    for obj in UserProfile.objects.iterator():
+        if obj.ssn_encrypted:
+            obj.ssn = FieldEncryptor.decrypt(obj.ssn_encrypted)
+            obj.save(update_fields=['ssn'])
+
+
+class Migration(migrations.Migration):
+    dependencies = [('myapp', '0002_userprofile_ssn_encrypted')]
+    operations = [migrations.RunPython(encrypt_ssn, reverse_encrypt_ssn)]
+```
+
+```bash
+python manage.py migrate myapp
+```
+
+**3. Remove the old plaintext field:**
+
+```python
+class UserProfile(models.Model):
+    ssn = EncryptedCharField(max_length=20)
+```
+
+```bash
+python manage.py makemigrations myapp && python manage.py migrate myapp
+```
+
+### Removing encryption from a field
+
+Reverse the three-migration pattern: add a plaintext column, decrypt into it, then remove the encrypted column.
+
+```python
+def decrypt_ssn(apps, schema_editor):
+    UserProfile = apps.get_model('myapp', 'UserProfile')
+    for obj in UserProfile.objects.iterator():
+        if obj.ssn:
+            obj.ssn_plaintext = FieldEncryptor.decrypt(obj.ssn)
+            obj.save(update_fields=['ssn_plaintext'])
+```
+
+### Switching encrypted field types
+
+All encrypted fields store as `TextField`, so no data migration is needed — just change the model definition and run `makemigrations`:
+
+```python
+# Before
+secret = EncryptedCharField(max_length=200)
+# After
+secret = EncryptedTextField()
+```
+
+### Key rotation
+
+```bash
+python manage.py rotate_encryption_keys --dry-run
+python manage.py rotate_encryption_keys
+python manage.py rotate_encryption_keys --app-label myapp --batch-size 500
+```
+
+For selective rotation:
+
+```python
+from django_field_encryption import FieldEncryptor
+
+for obj in MyModel.objects.all():
+    new_value = FieldEncryptor.rotate_value(obj.secret)
+    if new_value is not None:
+        obj.secret = new_value
+        obj.save(update_fields=['secret'])
+```
+
+After rotation, recompute blind index hashes:
+
+```python
+from django_field_encryption import compute_hash
+
+for obj in MyModel.objects.all():
+    obj.email_hash = compute_hash(obj.email)
+    obj.save(update_fields=['email_hash'])
+```
+
+Note: `bulk_create` and `bulk_update` don't fire `pre_save` signals, so hashes must be computed manually for bulk operations.
+
+## Django Admin
+
+Use the provided mixins to integrate encrypted fields with the Django admin:
+
+```python
+from django.contrib import admin
+from django_field_encryption import EncryptedFieldAdminMixin, EncryptedSearchMixin, compute_hash
+from .models import UserProfile
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(EncryptedSearchMixin, EncryptedFieldAdminMixin, admin.ModelAdmin):
+    list_display = ('name', 'display_ssn', 'created_at')
+    search_fields = ('name', 'ssn_hash')
+    encrypted_search_fields = {'ssn': 'ssn_hash'}
+
+    encrypted_field_mask = '***encrypted***'      # default mask in list views
+    show_encrypted_in_readonly = True             # move encrypted fields to readonly (default)
+    exclude_encrypted_from_search = True           # exclude encrypted fields from search (default)
+```
+
+- **`EncryptedFieldAdminMixin`** — masks encrypted fields in `list_display`, moves them to `readonly_fields`, and excludes them from `search_fields`.
+- **`EncryptedSearchMixin`** — enables searching by blind index hash via `encrypted_search_fields = {'field_name': 'hash_field_name'}`.
+
+Both mixins work with any `ModelAdmin` that inherits them.
+
 ## API Reference
 
 ### FieldEncryptor
