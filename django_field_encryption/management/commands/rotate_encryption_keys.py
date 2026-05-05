@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from django_field_encryption import FieldEncryptor, get_active_key_id, get_keys_config
+from django_field_encryption.encryption import PREFIX_SEPARATOR
 from django_field_encryption.fields import (
     EncryptedCharField,
     EncryptedJSONField,
@@ -90,27 +91,45 @@ class Command(BaseCommand):
                 skipped = 0
 
                 for offset in range(0, total, batch_size):
-                    batch = queryset[offset : offset + batch_size]
+                    raw_values = list(
+                        queryset[offset : offset + batch_size].values_list(
+                            'pk', field_name
+                        )
+                    )
                     updates = []
 
-                    for obj in batch:
-                        value = getattr(obj, field_name)  # type: ignore[arg-type]
-                        if not value:
+                    for pk, raw_value in raw_values:
+                        if not raw_value:
                             skipped += 1
                             continue
 
-                        new_value = FieldEncryptor.rotate_value(value)
-                        if new_value is not None:
-                            updates.append((obj.pk, new_value))
-                            rotated += 1
-                        else:
+                        raw_str = str(raw_value)
+
+                        if PREFIX_SEPARATOR not in raw_str:
                             skipped += 1
+                            continue
+
+                        old_key_id = raw_str.split(PREFIX_SEPARATOR, 1)[0]
+                        if old_key_id == active_key_id:
+                            skipped += 1
+                            continue
+
+                        try:
+                            plaintext = FieldEncryptor.decrypt(raw_str)
+                        except Exception:
+                            skipped += 1
+                            continue
+
+                        updates.append((pk, plaintext))
+                        rotated += 1
 
                     if updates and not dry_run:
-                        model.objects.bulk_update(
-                            [model(pk=pk, **{field_name: val}) for pk, val in updates],  # type: ignore[misc]
-                            [field_name],
-                        )
+                        objs = []
+                        for pk, val in updates:
+                            obj = model(pk=pk)
+                            setattr(obj, field_name, val)
+                            objs.append(obj)
+                        model.objects.bulk_update(objs, [field_name])
 
                 self.stdout.write(
                     f'  {field_name}: {rotated} rotated, {skipped} skipped (out of {total})'

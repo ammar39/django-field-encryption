@@ -80,5 +80,9 @@ class EncryptedFileStorage(BaseEncryptedStorage):
         underlying = FileSystemStorage(**kwargs)
         super().__init__(underlying_storage=underlying)
 
+    @classmethod
+    def deconstruct(cls):
+        return ('django_field_encryption.storage.EncryptedFileStorage', [], {})
+
 
 encrypted_file_storage = EncryptedFileStorage()
