@@ -223,6 +223,102 @@ class TestEncryptedCharField(TestCase):
 
 
 @override_settings(**ENCRYPTION_SETTINGS)
+class TestEncryptedTypedFields(TestCase):
+    def test_integer_field_roundtrip(self):
+        from django_field_encryption import EncryptedIntegerField
+
+        field = EncryptedIntegerField()
+        prep_value = field.get_prep_value(42)
+        self.assertNotEqual(prep_value, '42')
+        self.assertTrue(prep_value.startswith('v1:'))
+        python_value = field.to_python(prep_value)
+        self.assertEqual(python_value, 42)
+        self.assertIsInstance(python_value, int)
+
+    def test_integer_field_from_db_value(self):
+        from django_field_encryption import EncryptedIntegerField
+
+        field = EncryptedIntegerField()
+        prep_value = field.get_prep_value(42)
+        db_value = field.from_db_value(prep_value, None, None)
+        self.assertEqual(db_value, 42)
+        self.assertIsInstance(db_value, int)
+
+    def test_integer_field_none(self):
+        from django_field_encryption import EncryptedIntegerField
+
+        field = EncryptedIntegerField()
+        self.assertIsNone(field.get_prep_value(None))
+        self.assertIsNone(field.from_db_value(None, None, None))
+
+    def test_datetime_field_roundtrip(self):
+        from datetime import datetime
+
+        from django_field_encryption import EncryptedDateTimeField
+
+        field = EncryptedDateTimeField()
+        dt = datetime(2024, 1, 15, 10, 30, 0)
+        prep_value = field.get_prep_value(dt)
+        self.assertNotEqual(prep_value, str(dt))
+        self.assertTrue(prep_value.startswith('v1:'))
+        python_value = field.to_python(prep_value)
+        self.assertEqual(python_value, dt)
+        self.assertIsInstance(python_value, datetime)
+
+    def test_datetime_field_from_db_value(self):
+        from datetime import datetime
+
+        from django_field_encryption import EncryptedDateTimeField
+
+        field = EncryptedDateTimeField()
+        dt = datetime(2024, 1, 15, 10, 30, 0)
+        prep_value = field.get_prep_value(dt)
+        db_value = field.from_db_value(prep_value, None, None)
+        self.assertEqual(db_value, dt)
+        self.assertIsInstance(db_value, datetime)
+
+    def test_datetime_field_none(self):
+        from django_field_encryption import EncryptedDateTimeField
+
+        field = EncryptedDateTimeField()
+        self.assertIsNone(field.get_prep_value(None))
+        self.assertIsNone(field.from_db_value(None, None, None))
+
+    def test_date_field_roundtrip(self):
+        from datetime import date
+
+        from django_field_encryption import EncryptedDateField
+
+        field = EncryptedDateField()
+        d = date(2024, 1, 15)
+        prep_value = field.get_prep_value(d)
+        self.assertNotEqual(prep_value, str(d))
+        self.assertTrue(prep_value.startswith('v1:'))
+        python_value = field.to_python(prep_value)
+        self.assertEqual(python_value, d)
+        self.assertIsInstance(python_value, date)
+
+    def test_date_field_from_db_value(self):
+        from datetime import date
+
+        from django_field_encryption import EncryptedDateField
+
+        field = EncryptedDateField()
+        d = date(2024, 1, 15)
+        prep_value = field.get_prep_value(d)
+        db_value = field.from_db_value(prep_value, None, None)
+        self.assertEqual(db_value, d)
+        self.assertIsInstance(db_value, date)
+
+    def test_date_field_none(self):
+        from django_field_encryption import EncryptedDateField
+
+        field = EncryptedDateField()
+        self.assertIsNone(field.get_prep_value(None))
+        self.assertIsNone(field.from_db_value(None, None, None))
+
+
+@override_settings(**ENCRYPTION_SETTINGS)
 class TestKeyDerivationIsolation(TestCase):
     def test_field_and_file_keys_are_different(self):
         from django_field_encryption.conf import (
@@ -438,6 +534,162 @@ class TestFieldStrictMode(TestCase):
             tampered = 'v1:invalidbase64'
             result = field.to_python(tampered)
             self.assertEqual(result, tampered)
+
+
+class TestEncryptedFieldInitGuards(TestCase):
+    def test_primary_key_raises_improperly_configured(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        from django_field_encryption import EncryptedCharField
+
+        with self.assertRaises(ImproperlyConfigured):
+            EncryptedCharField(primary_key=True)
+
+    def test_unique_raises_improperly_configured(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        from django_field_encryption import EncryptedCharField
+
+        with self.assertRaises(ImproperlyConfigured):
+            EncryptedCharField(unique=True)
+
+    def test_db_index_raises_improperly_configured(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        from django_field_encryption import EncryptedCharField
+
+        with self.assertRaises(ImproperlyConfigured):
+            EncryptedCharField(db_index=True)
+
+    def test_primary_key_false_is_allowed(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField(primary_key=False)
+        self.assertFalse(field.primary_key)
+
+    def test_unique_false_is_allowed(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField(unique=False)
+        self.assertFalse(field.unique)
+
+    def test_db_index_false_is_allowed(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField(db_index=False)
+        self.assertFalse(field.db_index)
+
+    def test_text_field_unique_raises_improperly_configured(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        from django_field_encryption import EncryptedTextField
+
+        with self.assertRaises(ImproperlyConfigured):
+            EncryptedTextField(unique=True)
+
+    def test_integer_field_db_index_raises_improperly_configured(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        from django_field_encryption import EncryptedIntegerField
+
+        with self.assertRaises(ImproperlyConfigured):
+            EncryptedIntegerField(db_index=True)
+
+    def test_base_encrypted_field_primary_key_raises(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        from django_field_encryption import EncryptedFieldMixin
+
+        with self.assertRaises(ImproperlyConfigured):
+            EncryptedFieldMixin(primary_key=True)
+
+
+class TestEncryptedFieldLookupBlocking(TestCase):
+    def test_exact_lookup_raises_field_error(self):
+        from django.core.exceptions import FieldError
+
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        with self.assertRaises(FieldError):
+            field.get_lookup('exact')
+
+    def test_exact_lookup_error_mentions_field_name(self):
+        from django.core.exceptions import FieldError
+
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        try:
+            field.get_lookup('exact')
+        except FieldError as e:
+            self.assertIn('EncryptedCharField', str(e))
+            self.assertIn('exact', str(e))
+
+    def test_contains_lookup_raises_field_error(self):
+        from django.core.exceptions import FieldError
+
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        with self.assertRaises(FieldError):
+            field.get_lookup('contains')
+
+    def test_icontains_lookup_raises_field_error(self):
+        from django.core.exceptions import FieldError
+
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        with self.assertRaises(FieldError):
+            field.get_lookup('icontains')
+
+    def test_gt_lookup_raises_field_error(self):
+        from django.core.exceptions import FieldError
+
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        with self.assertRaises(FieldError):
+            field.get_lookup('gt')
+
+    def test_isnull_lookup_is_allowed(self):
+        from django.db.models.lookups import IsNull
+
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        lookup = field.get_lookup('isnull')
+        self.assertEqual(lookup, IsNull)
+
+    def test_text_field_exact_lookup_raises_field_error(self):
+        from django.core.exceptions import FieldError
+
+        from django_field_encryption import EncryptedTextField
+
+        field = EncryptedTextField()
+        with self.assertRaises(FieldError):
+            field.get_lookup('exact')
+
+    def test_integer_field_exact_lookup_raises_field_error(self):
+        from django.core.exceptions import FieldError
+
+        from django_field_encryption import EncryptedIntegerField
+
+        field = EncryptedIntegerField()
+        with self.assertRaises(FieldError):
+            field.get_lookup('exact')
+
+    def test_error_message_mentions_blind_index(self):
+        from django.core.exceptions import FieldError
+
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        try:
+            field.get_lookup('exact')
+        except FieldError as e:
+            self.assertIn('BlindIndexField', str(e))
 
 
 @override_settings(**ENCRYPTION_SETTINGS)
