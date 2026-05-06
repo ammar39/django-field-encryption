@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-field-encryption"
-version = "0.1.4"
+version = "0.2.0"
 description = "Field-level encryption for Django using AES-256-GCM"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -24,7 +24,7 @@ classifiers = [
 dependencies = ["cryptography>=41.0.0", "django>=4.2,<7.0"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-django", "ruff", "twine"]
+dev = ["pytest", "pytest-django", "ruff", "build", "twine"]
 
 [project.urls]
 Homepage = "https://github.com/ammar39/django-field-encryption"
