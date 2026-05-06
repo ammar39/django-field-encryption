@@ -125,6 +125,12 @@ class EncryptedFieldMixin(Base):
     def validators(self, value):
         self._validators = value
 
+    def db_type(self, connection):
+        return 'text'
+
+    def get_internal_type(self):
+        return 'CharField'
+
 
 class EncryptedCharField(EncryptedFieldMixin, models.TextField):
     _field_path = 'django_field_encryption.fields.EncryptedCharField'
@@ -198,22 +204,10 @@ class EncryptedDateTimeField(EncryptedFieldMixin, models.DateTimeField):
     _field_path = 'django_field_encryption.fields.EncryptedDateTimeField'
     description = 'AES-256-GCM encrypted DateTimeField'
 
-    def db_type(self, connection):
-        return 'text'
-
-    def get_internal_type(self):
-        return 'CharField'
-
 
 class EncryptedDateField(EncryptedFieldMixin, models.DateField):
     _field_path = 'django_field_encryption.fields.EncryptedDateField'
     description = 'AES-256-GCM encrypted DateField'
-
-    def db_type(self, connection):
-        return 'text'
-
-    def get_internal_type(self):
-        return 'CharField'
 
 
 class EncryptedIntegerField(EncryptedFieldMixin, models.IntegerField):
