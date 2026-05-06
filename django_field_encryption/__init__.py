@@ -22,6 +22,11 @@ from .exceptions import (
 from .fields import (
     BlindIndexField,
     EncryptedCharField,
+    EncryptedDateField,
+    EncryptedDateTimeField,
+    EncryptedEmailField,
+    EncryptedFieldMixin,
+    EncryptedIntegerField,
     EncryptedJSONField,
     EncryptedTextField,
 )
@@ -44,6 +49,11 @@ __all__ = [
     'EncryptedCharField',
     'EncryptedTextField',
     'EncryptedJSONField',
+    'EncryptedDateField',
+    'EncryptedDateTimeField',
+    'EncryptedIntegerField',
+    'EncryptedEmailField',
+    'EncryptedFieldMixin',
     'BlindIndexField',
     'BaseEncryptedStorage',
     'EncryptedFileStorage',
