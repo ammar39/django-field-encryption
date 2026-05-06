@@ -3,7 +3,11 @@ from django.db import models
 from django_field_encryption import (
     BlindIndexField,
     EncryptedCharField,
+    EncryptedDateField,
+    EncryptedDateTimeField,
+    EncryptedEmailField,
     EncryptedFileStorage,
+    EncryptedIntegerField,
     EncryptedJSONField,
     EncryptedTextField,
 )
@@ -11,7 +15,7 @@ from django_field_encryption import (
 
 class Profile(models.Model):
     name = models.CharField(max_length=100)
-    email = models.EmailField()
+    email = EncryptedEmailField(help_text='Encrypted email')
     ssn = EncryptedCharField(
         max_length=20, help_text='Social Security Number (encrypted)'
     )
@@ -22,7 +26,12 @@ class Profile(models.Model):
         blank=True,
         help_text='User preferences as JSON (encrypted)',
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    age = EncryptedIntegerField(null=True, blank=True, help_text='Age (encrypted)')
+    birth_date = EncryptedDateField(
+        null=True, blank=True, help_text='Date of birth (encrypted)'
+    )
+    created_at = EncryptedDateTimeField(auto_now_add=True)
+    updated_at = EncryptedDateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -38,8 +47,11 @@ class Document(models.Model):
         upload_to='documents/%Y/%m/',
         help_text='Uploaded file will be encrypted at rest',
     )
-    description = models.TextField(blank=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+    description = EncryptedTextField(blank=True, help_text='Encrypted description')
+    encrypted_pages = EncryptedIntegerField(
+        default=0, help_text='Number of encrypted pages'
+    )
+    uploaded_at = EncryptedDateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-uploaded_at']

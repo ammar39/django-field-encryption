@@ -1,21 +1,70 @@
 import json as json_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import FieldError, ImproperlyConfigured, ValidationError
 from django.core.validators import MaxLengthValidator
 from django.db import models
 from django.db.models.signals import pre_save
 
-from .encryption import PREFIX_SEPARATOR, FieldEncryptor, compute_hash
+from .encryption import FieldEncryptor, compute_hash
 from .exceptions import DecryptionError, EncryptionError
 
+if TYPE_CHECKING:
+    Base = models.Field
+else:
+    Base = object
 
-class EncryptedFieldMixin:
-    def __init__(self, *args: Any, strict: bool = False, **kwargs: Any):
+
+class EncryptedFieldMixin(Base):
+    _field_path: str = ''
+    default_validators: list = []
+
+    def __init__(self, *args: Any, strict: bool = True, **kwargs: Any):
+        if kwargs.get('primary_key'):
+            raise ImproperlyConfigured(
+                f'{self.__class__.__name__} does not support primary_key=True.'
+            )
+        if kwargs.get('unique'):
+            raise ImproperlyConfigured(
+                f'{self.__class__.__name__} does not support unique=True.'
+            )
+        if kwargs.get('db_index'):
+            raise ImproperlyConfigured(
+                f'{self.__class__.__name__} does not support db_index=True.'
+            )
         self._strict = strict
         super().__init__(*args, **kwargs)
 
+    def get_lookup(self, lookup_name):
+        if lookup_name != 'isnull':
+            raise FieldError(
+                f"{self.__class__.__name__} does not support '{lookup_name}' lookups. "
+                'Use a BlindIndexField for searchable encrypted fields.'
+            )
+        return super().get_lookup(lookup_name)  # type: ignore[misc]
+
+    def get_prep_value(self, value):
+        if value is None:
+            return value
+        return self._encrypt_value(value)
+
+    def get_db_prep_value(self, value, connection, prepared=False):
+        if value is None:
+            return value
+        if not prepared:
+            value = self.get_prep_value(value)
+        return value
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+        if self._field_path:
+            path = self._field_path
+        if not self._strict:
+            kwargs['strict'] = False
+        return name, path, args, kwargs
+
     def _decrypt_value(self, value):
-        if value is None or value == '':
+        if value is None or value == '' or not isinstance(value, str):
             return value
         try:
             return FieldEncryptor.decrypt(value)
@@ -29,14 +78,24 @@ class EncryptedFieldMixin:
             return value
 
     def from_db_value(self, value, expression, connection):
-        return self._decrypt_value(value)
+        decrypted = self._decrypt_value(value)
+        if decrypted is None or decrypted == '':
+            return decrypted
+        try:
+            return super().to_python(decrypted)
+        except (ValueError, TypeError, ValidationError):
+            return decrypted
 
     def to_python(self, value):
         if value is None or value == '':
             return value
-        if isinstance(value, str) and PREFIX_SEPARATOR in value:
-            return self._decrypt_value(value)
-        return value
+        value = self._decrypt_value(value)
+        if value is None or value == '':
+            return value
+        try:
+            return super().to_python(value)
+        except (ValueError, TypeError, ValidationError):
+            return value
 
     def _encrypt_value(self, value):
         if value is None:
@@ -48,15 +107,33 @@ class EncryptedFieldMixin:
                 raise
             return value
 
+    def _get_underlying_validators(self):
+        for base in self.__class__.__bases__:
+            if base is EncryptedFieldMixin:
+                continue
+            if base is not object and hasattr(base, 'default_validators'):
+                return list(base.default_validators)
+        return []
+
+    @property
+    def validators(self):
+        if hasattr(self, '_validators'):
+            return list(self.default_validators) + list(self._validators)
+        return list(self._get_underlying_validators())
+
+    @validators.setter
+    def validators(self, value):
+        self._validators = value
+
 
 class EncryptedCharField(EncryptedFieldMixin, models.TextField):
+    _field_path = 'django_field_encryption.fields.EncryptedCharField'
     description = 'AES-256-GCM encrypted CharField stored as TextField'
-    default_validators = []
 
     def __init__(
         self,
         *args: Any,
-        strict: bool = False,
+        strict: bool = True,
         char_max_length: int = 255,
         **kwargs: Any,
     ):
@@ -64,46 +141,23 @@ class EncryptedCharField(EncryptedFieldMixin, models.TextField):
         kwargs.setdefault('max_length', None)
         self._char_max_length = char_max_length
         super().__init__(*args, strict=strict, **kwargs)
-        self.validators = list(self.validators) + [  # type: ignore[assignment]
-            MaxLengthValidator(self._char_max_length)
-        ]
 
-    def get_prep_value(self, value):
-        return self._encrypt_value(value)
+    @property
+    def validators(self):
+        return list(super().validators) + [MaxLengthValidator(self._char_max_length)]
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
-        path = 'django_field_encryption.fields.EncryptedCharField'
         if self._char_max_length != 255:
             kwargs['char_max_length'] = self._char_max_length
-        if self._strict:
-            kwargs['strict'] = self._strict
         kwargs.pop('max_length', None)
-        return name, path, args, kwargs
-
-
-class EncryptedTextField(EncryptedFieldMixin, models.TextField):
-    description = 'AES-256-GCM encrypted TextField'
-
-    def __init__(self, *args: Any, strict: bool = False, **kwargs: Any):
-        super().__init__(*args, strict=strict, **kwargs)
-
-    def get_prep_value(self, value):
-        return self._encrypt_value(value)
-
-    def deconstruct(self):
-        name, path, args, kwargs = super().deconstruct()
-        path = 'django_field_encryption.fields.EncryptedTextField'
-        if self._strict:
-            kwargs['strict'] = self._strict
+        kwargs.pop('validators', None)
         return name, path, args, kwargs
 
 
 class EncryptedJSONField(EncryptedFieldMixin, models.TextField):
+    _field_path = 'django_field_encryption.fields.EncryptedJSONField'
     description = 'AES-256-GCM encrypted JSONField stored as TextField'
-
-    def __init__(self, *args: Any, strict: bool = False, **kwargs: Any):
-        super().__init__(*args, strict=strict, **kwargs)
 
     def _decrypt_and_parse(self, value):
         decrypted = self._decrypt_value(value)
@@ -126,9 +180,7 @@ class EncryptedJSONField(EncryptedFieldMixin, models.TextField):
     def to_python(self, value):
         if value is None:
             return value
-        if isinstance(value, str) and PREFIX_SEPARATOR in value:
-            return self._decrypt_and_parse(value)
-        return value
+        return self._decrypt_and_parse(value)
 
     def get_prep_value(self, value):
         if value is None:
@@ -136,12 +188,42 @@ class EncryptedJSONField(EncryptedFieldMixin, models.TextField):
         json_str = json_module.dumps(value, default=str)
         return self._encrypt_value(json_str)
 
-    def deconstruct(self):
-        name, path, args, kwargs = super().deconstruct()
-        path = 'django_field_encryption.fields.EncryptedJSONField'
-        if self._strict:
-            kwargs['strict'] = self._strict
-        return name, path, args, kwargs
+
+class EncryptedTextField(EncryptedFieldMixin, models.TextField):
+    _field_path = 'django_field_encryption.fields.EncryptedTextField'
+    description = 'AES-256-GCM encrypted TextField'
+
+
+class EncryptedDateTimeField(EncryptedFieldMixin, models.DateTimeField):
+    _field_path = 'django_field_encryption.fields.EncryptedDateTimeField'
+    description = 'AES-256-GCM encrypted DateTimeField'
+
+    def db_type(self, connection):
+        return 'text'
+
+    def get_internal_type(self):
+        return 'CharField'
+
+
+class EncryptedDateField(EncryptedFieldMixin, models.DateField):
+    _field_path = 'django_field_encryption.fields.EncryptedDateField'
+    description = 'AES-256-GCM encrypted DateField'
+
+    def db_type(self, connection):
+        return 'text'
+
+    def get_internal_type(self):
+        return 'CharField'
+
+
+class EncryptedIntegerField(EncryptedFieldMixin, models.IntegerField):
+    _field_path = 'django_field_encryption.fields.EncryptedIntegerField'
+    description = 'AES-256-GCM encrypted IntegerField'
+
+
+class EncryptedEmailField(EncryptedFieldMixin, models.EmailField):
+    _field_path = 'django_field_encryption.fields.EncryptedEmailField'
+    description = 'AES-256-GCM encrypted EmailField'
 
 
 class BlindIndexField(models.CharField):
@@ -176,6 +258,8 @@ class BlindIndexField(models.CharField):
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
         args = (self._source_field,) + tuple(args)
-        kwargs.pop('max_length', None)
-        kwargs.pop('editable', None)
+        if kwargs.get('max_length') == 64:
+            kwargs.pop('max_length', None)
+        if kwargs.get('editable') is False:
+            kwargs.pop('editable', None)
         return name, path, list(args), kwargs
