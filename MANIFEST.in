@@ -1,7 +1,7 @@
 include README.md
-include pyproject.toml
 include LICENSE
 recursive-include django_field_encryption *.py *.typed
+recursive-include docs *.md
 global-exclude *.pyc
 global-exclude __pycache__
 prune tests
