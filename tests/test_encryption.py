@@ -179,7 +179,7 @@ class TestEncryptedCharField(TestCase):
     def test_encrypted_char_field_max_length_validation(self):
         from django_field_encryption import EncryptedCharField
 
-        field = EncryptedCharField(char_max_length=5)
+        field = EncryptedCharField(max_length=5)
         field.run_validators('12345')
         with self.assertRaises(ValidationError):
             field.run_validators('123456')

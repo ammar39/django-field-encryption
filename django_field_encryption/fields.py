@@ -140,23 +140,27 @@ class EncryptedCharField(EncryptedFieldMixin, models.TextField):
         self,
         *args: Any,
         strict: bool = True,
-        char_max_length: int = 255,
+        max_length: int = 255,
         **kwargs: Any,
     ):
-
-        kwargs.setdefault('max_length', None)
-        self._char_max_length = char_max_length
+        kwargs.pop('max_length', None)
         super().__init__(*args, strict=strict, **kwargs)
+        self.max_length = max_length
 
     @property
     def validators(self):
-        return list(super().validators) + [MaxLengthValidator(self._char_max_length)]
+        if hasattr(self, '_validators'):
+            return (
+                list(self.default_validators)
+                + list(self._validators)
+                + [MaxLengthValidator(self.max_length)]
+            )
+        return [MaxLengthValidator(self.max_length)]
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
-        if self._char_max_length != 255:
-            kwargs['char_max_length'] = self._char_max_length
-        kwargs.pop('max_length', None)
+        if self.max_length != 255:
+            kwargs['max_length'] = self.max_length
         kwargs.pop('validators', None)
         return name, path, args, kwargs
 
