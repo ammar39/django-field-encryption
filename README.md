@@ -7,12 +7,14 @@ Field-level and file encryption for Django using AES-256-GCM with automatic key 
 
 ## Features
 
-- **Field-level encryption**: Encrypt sensitive data in Django model fields
+- **Field-level encryption**: Encrypt sensitive data in Django model fields (CharField, TextField, JSONField, IntegerField, DateField, DateTimeField, EmailField)
 - **File encryption**: Encrypt uploaded files with dedicated storage backend
+- **Blind index fields**: Searchable encrypted fields via HMAC-SHA256 hashes
 - **Automatic key rotation**: Seamlessly rotate encryption keys without data migration
-- **Key derivation**: Separate keys for fields and files using HKDF
+- **Key derivation**: Separate keys for fields, files, and hashes using HKDF
 - **Tamper detection**: AES-GCM provides built-in authentication
 - **Multiple key support**: Manage multiple encryption key versions
+- **Django admin integration**: Mask encrypted fields and search via blind indexes
 
 ## Installation
 
@@ -34,6 +36,7 @@ DATA_PROTECTION_ACTIVE_KEY_ID = 'v1'
 2. Use the encrypted fields:
 
 ```python
+from django.db import models
 from django_field_encryption import EncryptedCharField, EncryptedTextField
 
 class MyModel(models.Model):
@@ -72,6 +75,8 @@ rotated_value = FieldEncryptor.rotate_value(old_encrypted_value)
 
 ## Field Types
 
+All encrypted fields store data as `TextField` in the database. Lookups (except `isnull`) are blocked by default -- use `BlindIndexField` for searchable encrypted fields.
+
 ### EncryptedCharField
 
 Encrypted character field stored as TextField:
@@ -81,7 +86,7 @@ from django_field_encryption import EncryptedCharField
 
 class UserProfile(models.Model):
     ssn = EncryptedCharField(max_length=20)
-    credit_card = EncryptedCharField(char_max_length=16)
+    credit_card = EncryptedCharField(max_length=16)
 ```
 
 ### EncryptedTextField
@@ -109,11 +114,81 @@ class Settings(models.Model):
 
 ```python
 # Usage
-obj = MyModel.objects.create(
+obj = Settings.objects.create(
     preferences={'theme': 'dark', 'notifications': True}
 )
 # Automatically serialized, encrypted, and stored
 ```
+
+### EncryptedIntegerField
+
+Encrypted integer field:
+
+```python
+from django_field_encryption import EncryptedIntegerField
+
+class Account(models.Model):
+    balance = EncryptedIntegerField()
+```
+
+### EncryptedDateField / EncryptedDateTimeField
+
+Encrypted date and datetime fields:
+
+```python
+from django_field_encryption import EncryptedDateField, EncryptedDateTimeField
+
+class Event(models.Model):
+    event_date = EncryptedDateField()
+    created_at = EncryptedDateTimeField()
+```
+
+### EncryptedEmailField
+
+Encrypted email field:
+
+```python
+from django_field_encryption import EncryptedEmailField
+
+class Contact(models.Model):
+    email = EncryptedEmailField(max_length=255)
+```
+
+### EncryptedFieldMixin
+
+Base mixin for creating custom encrypted fields:
+
+```python
+from django.db import models
+from django_field_encryption import EncryptedFieldMixin
+
+class EncryptedURLField(EncryptedFieldMixin, models.URLField):
+    pass
+```
+
+The mixin accepts a `strict` parameter (default `True`). When `strict=False`, decryption failures return the raw value instead of raising an exception.
+
+## Blind Index Fields
+
+Enable unique lookups on encrypted fields without decrypting:
+
+```python
+from django_field_encryption import EncryptedCharField, BlindIndexField
+
+class UserProfile(models.Model):
+    email = EncryptedCharField(max_length=255)
+    email_hash = BlindIndexField('email', unique=True, db_index=True)
+```
+
+The hash is auto-computed on save via a `pre_save` signal. Lookup by hash:
+
+```python
+from django_field_encryption import compute_hash
+
+user = UserProfile.objects.get(email_hash=compute_hash('user@example.com'))
+```
+
+Note: `bulk_create` and `bulk_update` do not fire `pre_save` signals -- hashes must be computed manually for bulk operations.
 
 ## File Encryption
 
@@ -122,8 +197,8 @@ obj = MyModel.objects.create(
 Use the encrypted file storage for sensitive file uploads:
 
 ```python
-from django_field_encryption import EncryptedFileStorage
 from django.db import models
+from django_field_encryption import EncryptedFileStorage
 
 class Document(models.Model):
     file = models.FileField(storage=EncryptedFileStorage())
@@ -136,6 +211,19 @@ from django_field_encryption import encrypted_file_storage
 
 class Document(models.Model):
     file = models.FileField(storage=encrypted_file_storage)
+```
+
+### BaseEncryptedStorage
+
+Wrap any Django `Storage` backend with transparent encryption:
+
+```python
+from django_field_encryption import BaseEncryptedStorage
+from storages.backends.s3boto3 import S3Boto3Storage
+
+class EncryptedS3Storage(BaseEncryptedStorage):
+    def __init__(self, **kwargs):
+        super().__init__(underlying_storage=S3Boto3Storage(), **kwargs)
 ```
 
 ## Migrations
@@ -220,7 +308,7 @@ def decrypt_ssn(apps, schema_editor):
 
 ### Switching encrypted field types
 
-All encrypted fields store as `TextField`, so no data migration is needed — just change the model definition and run `makemigrations`:
+All encrypted fields store as `TextField`, so no data migration is needed -- just change the model definition and run `makemigrations`:
 
 ```python
 # Before
@@ -259,15 +347,13 @@ for obj in MyModel.objects.all():
     obj.save(update_fields=['email_hash'])
 ```
 
-Note: `bulk_create` and `bulk_update` don't fire `pre_save` signals, so hashes must be computed manually for bulk operations.
-
 ## Django Admin
 
 Use the provided mixins to integrate encrypted fields with the Django admin:
 
 ```python
 from django.contrib import admin
-from django_field_encryption import EncryptedFieldAdminMixin, EncryptedSearchMixin, compute_hash
+from django_field_encryption import EncryptedFieldAdminMixin, EncryptedSearchMixin
 from .models import UserProfile
 
 
@@ -277,13 +363,13 @@ class UserProfileAdmin(EncryptedSearchMixin, EncryptedFieldAdminMixin, admin.Mod
     search_fields = ('name', 'ssn_hash')
     encrypted_search_fields = {'ssn': 'ssn_hash'}
 
-    encrypted_field_mask = '***encrypted***'      # default mask in list views
-    show_encrypted_in_readonly = True             # move encrypted fields to readonly (default)
-    exclude_encrypted_from_search = True           # exclude encrypted fields from search (default)
+    encrypted_field_mask = '***encrypted***'
+    show_encrypted_in_readonly = True
+    exclude_encrypted_from_search = True
 ```
 
-- **`EncryptedFieldAdminMixin`** — masks encrypted fields in `list_display`, moves them to `readonly_fields`, and excludes them from `search_fields`.
-- **`EncryptedSearchMixin`** — enables searching by blind index hash via `encrypted_search_fields = {'field_name': 'hash_field_name'}`.
+- **`EncryptedFieldAdminMixin`** -- masks encrypted fields in `list_display`, moves them to `readonly_fields`, and excludes them from `search_fields`.
+- **`EncryptedSearchMixin`** -- enables searching by blind index hash via `encrypted_search_fields = {'field_name': 'hash_field_name'}`. If the hash field name is `None`, it defaults to `'{field_name}_hash'`.
 
 Both mixins work with any `ModelAdmin` that inherits them.
 
@@ -336,32 +422,14 @@ is_enc = FileEncryptor.is_encrypted(encrypted)  # True/False
 
 ### compute_hash
 
-Compute a deterministic hash for indexing (without encryption):
+Compute a deterministic HMAC-SHA256 hash for blind indexing:
 
 ```python
 from django_field_encryption import compute_hash
 
-hash_value = compute_hash('29901012345678')
+hash_value = compute_hash('user@example.com')
 # Returns: 64-character hex string
 ```
-
-### BlindIndexField
-
-Enable unique lookups on encrypted fields without decrypting:
-
-```python
-from django_field_encryption import EncryptedCharField, BlindIndexField
-
-class UserProfile(models.Model):
-    email = EncryptedCharField(max_length=255)
-    email_hash = BlindIndexField('email', unique=True, db_index=True)
-
-# Lookup by hash
-from django_field_encryption import compute_hash
-user = UserProfile.objects.get(email_hash=compute_hash('user@example.com'))
-```
-
-The hash is auto-computed on save via a `pre_save` signal. Note that `bulk_create` and `bulk_update` do not trigger signals — hashes must be computed manually for bulk operations.
 
 ### generate_master_key
 
@@ -388,27 +456,34 @@ active_key = get_active_key_id()  # Returns currently active key_id
 master_key = get_master_key('v1') # Returns raw 32-byte key for key_id
 ```
 
-## Compatibility
+### Exceptions
 
-| Python | Django |
-|--------|--------|
-| 3.9    | 4.2, 5.x |
-| 3.10   | 4.2, 5.x |
-| 3.11   | 4.2, 5.x |
-| 3.12   | 4.2, 5.x |
+```python
+from django_field_encryption import (
+    EncryptionError,
+    ConfigurationError,
+    InvalidKeyError,
+    DecryptionError,
+    EncryptionNotConfiguredError,
+)
+```
+
+All exceptions inherit from `EncryptionError`. `ConfigurationError`, `InvalidKeyError`, and `DecryptionError` accept optional `key_id` and other contextual attributes.
+
+## Compatibility
 
 - Django 4.2 LTS is fully supported
 - Django 5.0+ supported
-- Will support Django 6.x when released (constraint is `<7.0`)
+- Django 6.x supported (constraint is `<7.0`)
 
 ## Security Notes
 
 - Keys are 32 bytes (256 bits) for AES-256
 - Uses AES-GCM (Galois/Counter Mode) for authenticated encryption
 - Each encryption generates a unique 12-byte random nonce
-- Field and file keys are derived separately using HKDF
-- The library does not encrypt at rest - data is encrypted/decrypted in memory only
-- **High-volume deployments**: Rotate keys before reaching ~2³² encryptions per key to avoid nonce collision risk. See [docs/security.md](docs/security.md) for details.
+- Field, file, and hash keys are derived separately using HKDF
+- The library does not encrypt at rest -- data is encrypted/decrypted in memory only
+- **High-volume deployments**: Rotate keys before reaching ~2^32 encryptions per key to avoid nonce collision risk. See [docs/security.md](docs/security.md) for details.
 
 ## License
 
