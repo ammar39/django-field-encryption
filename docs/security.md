@@ -14,26 +14,53 @@ Important security considerations when using django-field-encryption.
 
 ### Key Derivation
 
-Field and file keys are derived separately using HKDF:
+All derived keys use **HKDF-SHA256** (RFC 5869) with the following parameters:
 
 ```
-field_key = HKDF(
-    master_key,
-    salt = SHA256(key_id),
-    info = "data-protection-field-" + key_id
-)
-
-file_key = HKDF(
-    master_key,
-    salt = SHA256(key_id),
-    info = "data-protection-file-" + key_id
-)
+derived_key = HKDF(
+    algorithm = SHA256,
+    length    = 32 bytes (AES-256),
+    salt      = SHA256(key_id),
+    info      = purpose_prefix + key_id,
+).derive(master_key)
 ```
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| **IKM** | 32-byte master key | Root secret from `DATA_PROTECTION_KEYS` |
+| **Salt** | `SHA256(key_id)` | Domain separation per key version |
+| **Info** | `{purpose_prefix}{key_id}` | Purpose binding (field, file, or hash) |
+| **Length** | 32 bytes | Output key size for AES-256 |
+
+#### Three Isolated Key Domains
+
+Each key ID produces three **cryptographically isolated** derived keys via distinct `info` prefixes:
+
+```
+Master Key (key_id='v1')
+    |
+    +-- HKDF(..., info=b'data-protection-field-v1') → AES-256 field key
+    +-- HKDF(..., info=b'data-protection-file-v1')  → AES-256 file key
+    +-- HKDF(..., info=b'data-protection-hash-v1')  → HMAC-SHA256 hash key
+```
+
+| Prefix | Used By |
+|--------|---------|
+| `data-protection-field-` | `FieldEncryptor` — model field encryption |
+| `data-protection-file-` | `FileEncryptor` — file/blob encryption |
+| `data-protection-hash-` | `compute_hash()` — blind index HMAC |
 
 This ensures:
-- Field encryption and file encryption use different keys
-- Each key version has a unique derived key
-- Compromise of one derived key doesn't affect others
+- Field encryption, file encryption, and blind index hashing use different keys
+- Each key version has a unique set of derived keys
+- Compromise of one derived key does not affect the others
+- The same master key can safely serve all three purposes
+
+#### Key Hierarchy
+
+The hierarchy is **flat** — there is no per-field or per-record key derivation. All fields encrypted under the same key ID share the same derived AES key. Ciphertext uniqueness for repeated plaintexts comes from the random 12-byte nonce generated via `os.urandom(12)` on each encryption.
+
+Derived keys are cached in thread-safe module-level dictionaries to avoid repeated HKDF computation.
 
 ## Security Properties
 
