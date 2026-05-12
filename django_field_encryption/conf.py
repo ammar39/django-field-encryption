@@ -8,6 +8,35 @@ PREFIX_SEPARATOR = ':'
 NONCE_LENGTH = 12
 
 
+class MasterKey:
+    """Wrapper that prevents accidental exposure of key material via repr/str."""
+
+    __slots__ = ('_key',)
+
+    def __init__(self, key: bytes):
+        self._key = key
+
+    def __bytes__(self) -> bytes:
+        return self._key
+
+    def __repr__(self) -> str:
+        return '<MasterKey>'
+
+    def __str__(self) -> str:
+        return '<MasterKey>'
+
+    def __len__(self) -> int:
+        return len(self._key)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, MasterKey):
+            return self._key == other._key
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._key)
+
+
 def _get_keys_config() -> dict[str, str]:
     try:
         from django.conf import settings
@@ -70,5 +99,5 @@ def get_active_key_id() -> str:
     return _get_active_key_id()
 
 
-def get_master_key(key_id: str) -> bytes:
-    return _get_master_key(key_id)
+def get_master_key(key_id: str) -> MasterKey:
+    return MasterKey(_get_master_key(key_id))

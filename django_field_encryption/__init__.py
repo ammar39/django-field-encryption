@@ -2,6 +2,7 @@ from .admin import EncryptedFieldAdminMixin, EncryptedSearchMixin
 from .conf import (
     NONCE_LENGTH,
     PREFIX_SEPARATOR,
+    MasterKey,
     get_active_key_id,
     get_keys_config,
     get_master_key,
@@ -44,6 +45,7 @@ __all__ = [
     'get_keys_config',
     'get_active_key_id',
     'get_master_key',
+    'MasterKey',
     'FieldEncryptor',
     'FileEncryptor',
     'compute_hash',
