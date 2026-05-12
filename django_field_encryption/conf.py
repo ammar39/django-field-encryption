@@ -27,10 +27,10 @@ def _get_active_key_id() -> str:
     except (ImproperlyConfigured, RuntimeError):
         pass
 
-    keys = _get_keys_config()
-    if keys:
-        return sorted(keys.keys())[-1]
-    return ''
+    raise ConfigurationError(
+        'DATA_PROTECTION_ACTIVE_KEY_ID is required. '
+        'Set it in settings to specify which key to use for encryption.'
+    )
 
 
 def _get_master_key(key_id: str) -> bytes:

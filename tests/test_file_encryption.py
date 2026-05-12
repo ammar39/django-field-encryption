@@ -133,11 +133,11 @@ class TestFileTamperDetection(TestCase):
 class TestFileErrorHandling(TestCase):
     def test_file_encrypt_without_config_raises_error(self):
         from django_field_encryption import FileEncryptor
-        from django_field_encryption.exceptions import EncryptionNotConfiguredError
+        from django_field_encryption.exceptions import ConfigurationError
 
         FileEncryptor.clear_cache()
         no_keys_settings = {}
         with override_settings(**no_keys_settings):
             FileEncryptor.clear_cache()
-            with self.assertRaises(EncryptionNotConfiguredError):
+            with self.assertRaises(ConfigurationError):
                 FileEncryptor.encrypt(b'test')
