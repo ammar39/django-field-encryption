@@ -907,3 +907,99 @@ class TestBlindIndexField(TestCase):
 
         field = BlindIndexField('email')
         self.assertEqual(field.max_length, 64)
+
+
+@override_settings(
+    DATA_PROTECTION_KEYS={'v1': TEST_MASTER_KEY, 'v2': TEST_MASTER_KEY_V2},
+    DATA_PROTECTION_ACTIVE_KEY_ID='v2',
+)
+class TestFieldKeyPinning(TestCase):
+    def setUp(self):
+        from django_field_encryption import FieldEncryptor
+
+        FieldEncryptor.clear_cache()
+        self.encryptor = FieldEncryptor
+
+    def test_encrypt_with_explicit_key_id(self):
+        encrypted = self.encryptor.encrypt('secret', key_id='v1')
+        self.assertTrue(encrypted.startswith('v1:'))
+        decrypted = self.encryptor.decrypt(encrypted)
+        self.assertEqual(decrypted, 'secret')
+
+    def test_encrypt_without_key_id_uses_active(self):
+        encrypted = self.encryptor.encrypt('secret')
+        self.assertTrue(encrypted.startswith('v2:'))
+
+    def test_encrypted_field_with_pinned_key_id(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField(key_id='v1')
+        encrypted = field.get_prep_value('test')
+        self.assertTrue(encrypted.startswith('v1:'))
+        decrypted = field.to_python(encrypted)
+        self.assertEqual(decrypted, 'test')
+
+    def test_encrypted_field_without_key_id_uses_active(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        encrypted = field.get_prep_value('test')
+        self.assertTrue(encrypted.startswith('v2:'))
+
+    def test_deconstruct_includes_key_id(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField(key_id='v1')
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(kwargs.get('key_id'), 'v1')
+
+    def test_deconstruct_omits_key_id_when_none(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertNotIn('key_id', kwargs)
+
+    def test_decryption_ignores_field_key_id(self):
+        from django_field_encryption import EncryptedCharField
+
+        v1_encrypted = self.encryptor.encrypt('secret', key_id='v1')
+        field = EncryptedCharField(key_id='v2')
+        decrypted = field.to_python(v1_encrypted)
+        self.assertEqual(decrypted, 'secret')
+
+
+class TestBlindIndexFieldKeyPinningDeconstruct(TestCase):
+    def test_deconstruct_includes_key_id(self):
+        from django_field_encryption import BlindIndexField
+
+        field = BlindIndexField('email', key_id='v1')
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(kwargs.get('key_id'), 'v1')
+
+    def test_deconstruct_omits_key_id_when_none(self):
+        from django_field_encryption import BlindIndexField
+
+        field = BlindIndexField('email')
+        name, path, args, kwargs = field.deconstruct()
+        self.assertNotIn('key_id', kwargs)
+
+    @override_settings(**ENCRYPTION_SETTINGS)
+    def test_compute_hash_with_explicit_key_id(self):
+        from django_field_encryption import FieldEncryptor, compute_hash
+
+        FieldEncryptor.clear_cache()
+        hash_v1 = compute_hash('test', key_id='v1')
+        self.assertEqual(len(hash_v1), 64)
+
+    @override_settings(
+        DATA_PROTECTION_KEYS={'v1': TEST_MASTER_KEY, 'v2': TEST_MASTER_KEY_V2},
+        DATA_PROTECTION_ACTIVE_KEY_ID='v2',
+    )
+    def test_hash_differs_by_key_id(self):
+        from django_field_encryption import FieldEncryptor, compute_hash
+
+        FieldEncryptor.clear_cache()
+        hash_v1 = compute_hash('same_value', key_id='v1')
+        hash_v2 = compute_hash('same_value', key_id='v2')
+        self.assertNotEqual(hash_v1, hash_v2)
