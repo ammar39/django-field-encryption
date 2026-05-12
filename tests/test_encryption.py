@@ -62,6 +62,39 @@ class TestFieldEncryptor(TestCase):
     def test_can_decrypt_unknown_key(self):
         self.assertFalse(self.encryptor.can_decrypt('v99:somegarbage'))
 
+    def test_is_encrypted_valid_ciphertext(self):
+        encrypted = self.encryptor.encrypt('secret')
+        self.assertTrue(self.encryptor.is_encrypted(encrypted))
+
+    def test_is_encrypted_plaintext(self):
+        self.assertFalse(self.encryptor.is_encrypted('hello world'))
+
+    def test_is_encrypted_empty_string(self):
+        self.assertFalse(self.encryptor.is_encrypted(''))
+
+    def test_is_encrypted_none(self):
+        self.assertFalse(self.encryptor.is_encrypted(None))
+
+    def test_is_encrypted_malformed_base64(self):
+        self.assertFalse(self.encryptor.is_encrypted('v1:!!!invalid@@@'))
+
+    def test_is_encrypted_unknown_key_id(self):
+        self.assertFalse(self.encryptor.is_encrypted('v99:YWJjZGVmZ2hpamtsbW5vcA=='))
+
+    def test_is_encrypted_short_payload(self):
+        import base64
+
+        short_payload = base64.urlsafe_b64encode(b'short').decode()
+        self.assertFalse(self.encryptor.is_encrypted(f'v1:{short_payload}'))
+
+    def test_encrypted_field_is_encrypted_method(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        encrypted = field._encrypt_value('test')
+        self.assertTrue(field.is_encrypted(encrypted))
+        self.assertFalse(field.is_encrypted('plain text'))
+
     def test_unicode_roundtrip(self):
         plaintext = 'مرحبا العالم — هِشَام'
         encrypted = self.encryptor.encrypt(plaintext)
