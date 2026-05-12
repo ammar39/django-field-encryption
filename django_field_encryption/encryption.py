@@ -64,12 +64,13 @@ class FieldEncryptor:
             return aesgcm
 
     @classmethod
-    def encrypt(cls, plaintext: str) -> str:
-        key_id = _get_active_key_id()
+    def encrypt(cls, plaintext: str, key_id: Optional[str] = None) -> str:
+        if key_id is None:
+            key_id = _get_active_key_id()
         if not key_id:
             raise EncryptionNotConfiguredError(
                 'No active encryption key configured. '
-                'Set DATA_PROTECTION_ACTIVE_KEY_ID in settings.'
+                'Set DATA_PROTECTION_ACTIVE_KEY_ID in settings or pass key_id explicitly.'
             )
         try:
             nonce = os.urandom(NONCE_LENGTH)
