@@ -1,3 +1,4 @@
+import types as _types
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Optional
 
@@ -69,12 +70,10 @@ class EncryptedFieldAdminMixin(Base):
 
         mask = self.encrypted_field_mask
 
-        def _display(
-            self_admin: object, _fn: str = field_name, _mask: str = mask
-        ) -> str:
+        def _display(_self, _fn=field_name, _mask=mask):
             return _mask
 
-        setattr(type(self), method_name, _display)
+        setattr(self, method_name, _types.MethodType(_display, self))
         return method_name
 
 
