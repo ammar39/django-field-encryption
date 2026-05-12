@@ -268,10 +268,9 @@ def _derive_hash_key(master_key: bytes, key_id: str) -> bytes:
     with _cache_lock:
         if cache_key in _hash_key_cache:
             return _hash_key_cache[cache_key]
-    derived = _derive_aes_key(master_key, key_id, HASH_KEY_INFO_PREFIX)
-    with _cache_lock:
+        derived = _derive_aes_key(master_key, key_id, HASH_KEY_INFO_PREFIX)
         _hash_key_cache[cache_key] = derived
-    return derived
+        return derived
 
 
 def compute_hash(value: str, key_id: Optional[str] = None) -> str:
