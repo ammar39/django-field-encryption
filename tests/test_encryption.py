@@ -149,13 +149,13 @@ class TestFieldEncryptorKeyRotation(TestCase):
     def test_rotate_value_no_change_if_same_key(self):
         encrypted = self.encryptor.encrypt('same_key_test')
         rotated = self.encryptor.rotate_value(encrypted)
-        self.assertIsNone(rotated)
+        self.assertEqual(rotated, encrypted)
 
     def test_rotate_value_empty_string(self):
-        self.assertIsNone(self.encryptor.rotate_value(''))
+        self.assertEqual(self.encryptor.rotate_value(''), '')
 
     def test_rotate_value_non_encrypted_string(self):
-        self.assertIsNone(self.encryptor.rotate_value('plain text'))
+        self.assertEqual(self.encryptor.rotate_value('plain text'), 'plain text')
 
 
 @override_settings(**ENCRYPTION_SETTINGS)

@@ -145,13 +145,13 @@ class FieldEncryptor:
             return False
 
     @classmethod
-    def rotate_value(cls, encrypted: str) -> Optional[str]:
+    def rotate_value(cls, encrypted: str) -> str:
         if not encrypted or PREFIX_SEPARATOR not in encrypted:
-            return None
+            return encrypted
         old_key_id = encrypted.split(PREFIX_SEPARATOR, 1)[0]
         active_key_id = _get_active_key_id()
         if old_key_id == active_key_id:
-            return None
+            return encrypted
         plaintext = cls.decrypt(encrypted)
         return cls.encrypt(plaintext)
 
