@@ -125,10 +125,23 @@ class FieldEncryptor:
 
     @classmethod
     def can_decrypt(cls, encrypted: str) -> bool:
-        if not encrypted or PREFIX_SEPARATOR not in encrypted:
+        return cls.is_encrypted(encrypted)
+
+    @classmethod
+    def is_encrypted(cls, value: Optional[str]) -> bool:
+        if not value or not isinstance(value, str) or PREFIX_SEPARATOR not in value:
             return False
-        key_id = encrypted.split(PREFIX_SEPARATOR, 1)[0]
-        return key_id in _get_keys_config()
+        try:
+            key_id, encoded = value.split(PREFIX_SEPARATOR, 1)
+        except ValueError:
+            return False
+        if key_id not in _get_keys_config():
+            return False
+        try:
+            payload = base64.urlsafe_b64decode(encoded.encode('ascii'))
+            return len(payload) >= NONCE_LENGTH
+        except Exception:
+            return False
 
     @classmethod
     def rotate_value(cls, encrypted: str) -> Optional[str]:
