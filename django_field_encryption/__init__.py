@@ -30,6 +30,7 @@ from .fields import (
     EncryptedJSONField,
     EncryptedTextField,
 )
+from .rotation import rotate_keys
 from .storage import (
     BaseEncryptedStorage,
     EncryptedFileStorage,
@@ -65,4 +66,5 @@ __all__ = [
     'ConfigurationError',
     'EncryptedFieldAdminMixin',
     'EncryptedSearchMixin',
+    'rotate_keys',
 ]
