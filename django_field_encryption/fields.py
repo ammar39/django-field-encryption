@@ -86,14 +86,10 @@ class EncryptedFieldMixin(Base):
         if value is None or value == '' or not isinstance(value, str):
             return value
         if not self.is_encrypted(value):
-            if not self._strict:
-                return value
-            if ':' in value:
-                key_id = value.split(':', 1)[0]
-                from .conf import _get_keys_config
-
-                if key_id in _get_keys_config():
-                    return FieldEncryptor.decrypt(value)
+            if self._strict:
+                raise DecryptionError(
+                    f'Value does not appear to be encrypted: {value!r}'
+                )
             return value
         try:
             return FieldEncryptor.decrypt(value)
