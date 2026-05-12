@@ -1,5 +1,5 @@
 import json as json_module
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from django.core.exceptions import FieldError, ImproperlyConfigured, ValidationError
 from django.core.validators import MaxLengthValidator
@@ -19,7 +19,13 @@ class EncryptedFieldMixin(Base):
     _field_path: str = ''
     default_validators: list = []
 
-    def __init__(self, *args: Any, strict: bool = True, **kwargs: Any):
+    def __init__(
+        self,
+        *args: Any,
+        strict: bool = True,
+        key_id: Optional[str] = None,
+        **kwargs: Any,
+    ):
         if kwargs.get('primary_key'):
             raise ImproperlyConfigured(
                 f'{self.__class__.__name__} does not support primary_key=True.'
@@ -33,6 +39,7 @@ class EncryptedFieldMixin(Base):
                 f'{self.__class__.__name__} does not support db_index=True.'
             )
         self._strict = strict
+        self._key_id = key_id
         super().__init__(*args, **kwargs)
 
     def get_lookup(self, lookup_name):
@@ -61,6 +68,8 @@ class EncryptedFieldMixin(Base):
             path = self._field_path
         if not self._strict:
             kwargs['strict'] = False
+        if self._key_id:
+            kwargs['key_id'] = self._key_id
         return name, path, args, kwargs
 
     def _decrypt_value(self, value):
@@ -111,7 +120,7 @@ class EncryptedFieldMixin(Base):
         if value is None:
             return value
         try:
-            return FieldEncryptor.encrypt(str(value))
+            return FieldEncryptor.encrypt(str(value), key_id=self._key_id)
         except EncryptionError:
             if self._strict:
                 raise
@@ -155,10 +164,11 @@ class EncryptedCharField(EncryptedFieldMixin, models.TextField):
         *args: Any,
         strict: bool = True,
         max_length: int = 255,
+        key_id: Optional[str] = None,
         **kwargs: Any,
     ):
         kwargs.pop('max_length', None)
-        super().__init__(*args, strict=strict, **kwargs)
+        super().__init__(*args, strict=strict, key_id=key_id, **kwargs)
         self.max_length = max_length
 
     @property
@@ -249,10 +259,11 @@ class BlindIndexField(models.CharField):
             email_hash = BlindIndexField('email', unique=True, db_index=True)
     """
 
-    def __init__(self, source_field: str, **kwargs: Any):
+    def __init__(self, source_field: str, key_id: Optional[str] = None, **kwargs: Any):
         kwargs.setdefault('max_length', 64)
         kwargs.setdefault('editable', False)
         self._source_field = source_field
+        self._key_id = key_id
         super().__init__(**kwargs)
 
     def contribute_to_class(self, cls, name, **kwargs: Any):
@@ -264,7 +275,7 @@ class BlindIndexField(models.CharField):
         if source_value is None or source_value == '':
             setattr(instance, self.attname or '', None)
             return
-        hash_value = compute_hash(str(source_value))
+        hash_value = compute_hash(str(source_value), key_id=self._key_id)
         setattr(instance, self.attname or '', hash_value)
 
     def deconstruct(self):
@@ -274,4 +285,6 @@ class BlindIndexField(models.CharField):
             kwargs.pop('max_length', None)
         if kwargs.get('editable') is False:
             kwargs.pop('editable', None)
+        if self._key_id:
+            kwargs['key_id'] = self._key_id
         return name, path, list(args), kwargs
