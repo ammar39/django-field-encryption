@@ -2,11 +2,7 @@ from django.core.management.base import BaseCommand
 
 from django_field_encryption import FieldEncryptor, get_active_key_id, get_keys_config
 from django_field_encryption.encryption import PREFIX_SEPARATOR
-from django_field_encryption.fields import (
-    EncryptedCharField,
-    EncryptedJSONField,
-    EncryptedTextField,
-)
+from django_field_encryption.fields import ENCRYPTED_FIELD_CLASSES
 
 
 class Command(BaseCommand):
@@ -52,12 +48,6 @@ class Command(BaseCommand):
         self.stdout.write(f'Known keys: {", ".join(sorted(keys_config.keys()))}')
         self.stdout.write('')
 
-        encrypted_field_classes = (
-            EncryptedCharField,
-            EncryptedTextField,
-            EncryptedJSONField,
-        )
-
         from django.apps import apps
 
         total_rotated = 0
@@ -70,7 +60,7 @@ class Command(BaseCommand):
             encrypted_fields = [
                 field
                 for field in model._meta.fields
-                if isinstance(field, encrypted_field_classes)
+                if isinstance(field, ENCRYPTED_FIELD_CLASSES)
             ]
 
             if not encrypted_fields:

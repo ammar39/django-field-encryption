@@ -248,6 +248,17 @@ class EncryptedEmailField(EncryptedFieldMixin, models.EmailField):
     description = 'AES-256-GCM encrypted EmailField'
 
 
+ENCRYPTED_FIELD_CLASSES: tuple[type[EncryptedFieldMixin], ...] = (
+    EncryptedCharField,
+    EncryptedDateField,
+    EncryptedDateTimeField,
+    EncryptedEmailField,
+    EncryptedIntegerField,
+    EncryptedJSONField,
+    EncryptedTextField,
+)
+
+
 class BlindIndexField(models.CharField):
     """Auto-computed HMAC-SHA256 index for an encrypted field.
 

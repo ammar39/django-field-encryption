@@ -6,7 +6,7 @@ from django.db.models import QuerySet
 from django.http import HttpRequest
 
 from .encryption import compute_hash
-from .fields import EncryptedCharField, EncryptedJSONField, EncryptedTextField
+from .fields import ENCRYPTED_FIELD_CLASSES
 
 if TYPE_CHECKING:
     Base = ModelAdmin
@@ -59,9 +59,7 @@ class EncryptedFieldAdminMixin(Base):
         return [
             f.name  # type: ignore[typeddict-item]
             for f in self.model._meta.fields
-            if isinstance(
-                f, (EncryptedCharField, EncryptedTextField, EncryptedJSONField)
-            )
+            if isinstance(f, ENCRYPTED_FIELD_CLASSES)
         ]
 
     def _masked_display_name(self, field_name: str) -> str:
