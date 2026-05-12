@@ -217,6 +217,16 @@ class TestEncryptedCharField(TestCase):
         with self.assertRaises(ValidationError):
             field.run_validators('123456')
 
+    def test_encrypted_char_field_max_length_on_ciphertext(self):
+        from django_field_encryption import EncryptedCharField, FieldEncryptor
+
+        field = EncryptedCharField(max_length=5)
+        ciphertext = FieldEncryptor.encrypt('ab')
+        field.run_validators(ciphertext)
+        long_ciphertext = FieldEncryptor.encrypt('abcdef')
+        with self.assertRaises(ValidationError):
+            field.run_validators(long_ciphertext)
+
     def test_encrypted_text_field_roundtrip(self):
         from django_field_encryption import EncryptedTextField
 

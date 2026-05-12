@@ -15,6 +15,16 @@ else:
     Base = object
 
 
+class EncryptedMaxLengthValidator(MaxLengthValidator):
+    def clean(self, x):
+        if isinstance(x, str) and FieldEncryptor.is_encrypted(x):
+            try:
+                x = FieldEncryptor.decrypt(x)
+            except DecryptionError:
+                pass
+        return len(x)
+
+
 class EncryptedFieldMixin(Base):
     _field_path: str = ''
     default_validators: list = []
@@ -177,9 +187,9 @@ class EncryptedCharField(EncryptedFieldMixin, models.TextField):
             return (
                 list(self.default_validators)
                 + list(self._validators)
-                + [MaxLengthValidator(self.max_length)]
+                + [EncryptedMaxLengthValidator(self.max_length)]
             )
-        return [MaxLengthValidator(self.max_length)]
+        return [EncryptedMaxLengthValidator(self.max_length)]
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()

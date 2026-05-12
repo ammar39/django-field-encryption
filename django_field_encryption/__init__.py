@@ -28,6 +28,7 @@ from .fields import (
     EncryptedFieldMixin,
     EncryptedIntegerField,
     EncryptedJSONField,
+    EncryptedMaxLengthValidator,
     EncryptedTextField,
 )
 from .rotation import rotate_keys
@@ -59,6 +60,7 @@ __all__ = [
     'BaseEncryptedStorage',
     'EncryptedFileStorage',
     'encrypted_file_storage',
+    'EncryptedMaxLengthValidator',
     'DecryptionError',
     'EncryptionError',
     'EncryptionNotConfiguredError',
