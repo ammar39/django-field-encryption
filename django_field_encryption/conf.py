@@ -100,4 +100,12 @@ def get_active_key_id() -> str:
 
 
 def get_master_key(key_id: str) -> MasterKey:
+    """Return the raw master key for a given key ID.
+
+    Raises:
+        ConfigurationError: If ``DATA_PROTECTION_KEYS`` is not configured
+            or ``key_id`` is empty.
+        InvalidKeyError: If ``key_id`` is unknown or the key is not
+            32 bytes (or a valid 44-char base64-encoded 32-byte key).
+    """
     return MasterKey(_get_master_key(key_id))
