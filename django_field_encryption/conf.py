@@ -8,6 +8,35 @@ PREFIX_SEPARATOR = ':'
 NONCE_LENGTH = 12
 
 
+class MasterKey:
+    """Wrapper that prevents accidental exposure of key material via repr/str."""
+
+    __slots__ = ('_key',)
+
+    def __init__(self, key: bytes):
+        self._key = key
+
+    def __bytes__(self) -> bytes:
+        return self._key
+
+    def __repr__(self) -> str:
+        return '<MasterKey>'
+
+    def __str__(self) -> str:
+        return '<MasterKey>'
+
+    def __len__(self) -> int:
+        return len(self._key)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, MasterKey):
+            return self._key == other._key
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._key)
+
+
 def _get_keys_config() -> dict[str, str]:
     try:
         from django.conf import settings
@@ -27,10 +56,10 @@ def _get_active_key_id() -> str:
     except (ImproperlyConfigured, RuntimeError):
         pass
 
-    keys = _get_keys_config()
-    if keys:
-        return sorted(keys.keys())[-1]
-    return ''
+    raise ConfigurationError(
+        'DATA_PROTECTION_ACTIVE_KEY_ID is required. '
+        'Set it in settings to specify which key to use for encryption.'
+    )
 
 
 def _get_master_key(key_id: str) -> bytes:
@@ -70,5 +99,13 @@ def get_active_key_id() -> str:
     return _get_active_key_id()
 
 
-def get_master_key(key_id: str) -> bytes:
-    return _get_master_key(key_id)
+def get_master_key(key_id: str) -> MasterKey:
+    """Return the raw master key for a given key ID.
+
+    Raises:
+        ConfigurationError: If ``DATA_PROTECTION_KEYS`` is not configured
+            or ``key_id`` is empty.
+        InvalidKeyError: If ``key_id`` is unknown or the key is not
+            32 bytes (or a valid 44-char base64-encoded 32-byte key).
+    """
+    return MasterKey(_get_master_key(key_id))

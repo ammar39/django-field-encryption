@@ -15,6 +15,16 @@ else:
     Base = object
 
 
+class EncryptedMaxLengthValidator(MaxLengthValidator):
+    def clean(self, x):
+        if isinstance(x, str) and FieldEncryptor.is_encrypted(x):
+            try:
+                x = FieldEncryptor.decrypt(x)
+            except DecryptionError:
+                pass
+        return len(x)
+
+
 class EncryptedFieldMixin(Base):
     _field_path: str = ''
     default_validators: list = []
@@ -76,14 +86,10 @@ class EncryptedFieldMixin(Base):
         if value is None or value == '' or not isinstance(value, str):
             return value
         if not self.is_encrypted(value):
-            if not self._strict:
-                return value
-            if ':' in value:
-                key_id = value.split(':', 1)[0]
-                from .conf import _get_keys_config
-
-                if key_id in _get_keys_config():
-                    return FieldEncryptor.decrypt(value)
+            if self._strict:
+                raise DecryptionError(
+                    f'Value does not appear to be encrypted: {value!r}'
+                )
             return value
         try:
             return FieldEncryptor.decrypt(value)
@@ -177,9 +183,9 @@ class EncryptedCharField(EncryptedFieldMixin, models.TextField):
             return (
                 list(self.default_validators)
                 + list(self._validators)
-                + [MaxLengthValidator(self.max_length)]
+                + [EncryptedMaxLengthValidator(self.max_length)]
             )
-        return [MaxLengthValidator(self.max_length)]
+        return [EncryptedMaxLengthValidator(self.max_length)]
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
@@ -246,6 +252,17 @@ class EncryptedIntegerField(EncryptedFieldMixin, models.IntegerField):
 class EncryptedEmailField(EncryptedFieldMixin, models.EmailField):
     _field_path = 'django_field_encryption.fields.EncryptedEmailField'
     description = 'AES-256-GCM encrypted EmailField'
+
+
+ENCRYPTED_FIELD_CLASSES: tuple[type[EncryptedFieldMixin], ...] = (
+    EncryptedCharField,
+    EncryptedDateField,
+    EncryptedDateTimeField,
+    EncryptedEmailField,
+    EncryptedIntegerField,
+    EncryptedJSONField,
+    EncryptedTextField,
+)
 
 
 class BlindIndexField(models.CharField):

@@ -149,13 +149,13 @@ class TestFieldEncryptorKeyRotation(TestCase):
     def test_rotate_value_no_change_if_same_key(self):
         encrypted = self.encryptor.encrypt('same_key_test')
         rotated = self.encryptor.rotate_value(encrypted)
-        self.assertIsNone(rotated)
+        self.assertEqual(rotated, encrypted)
 
     def test_rotate_value_empty_string(self):
-        self.assertIsNone(self.encryptor.rotate_value(''))
+        self.assertEqual(self.encryptor.rotate_value(''), '')
 
     def test_rotate_value_non_encrypted_string(self):
-        self.assertIsNone(self.encryptor.rotate_value('plain text'))
+        self.assertEqual(self.encryptor.rotate_value('plain text'), 'plain text')
 
 
 @override_settings(**ENCRYPTION_SETTINGS)
@@ -216,6 +216,16 @@ class TestEncryptedCharField(TestCase):
         field.run_validators('12345')
         with self.assertRaises(ValidationError):
             field.run_validators('123456')
+
+    def test_encrypted_char_field_max_length_on_ciphertext(self):
+        from django_field_encryption import EncryptedCharField, FieldEncryptor
+
+        field = EncryptedCharField(max_length=5)
+        ciphertext = FieldEncryptor.encrypt('ab')
+        field.run_validators(ciphertext)
+        long_ciphertext = FieldEncryptor.encrypt('abcdef')
+        with self.assertRaises(ValidationError):
+            field.run_validators(long_ciphertext)
 
     def test_encrypted_text_field_roundtrip(self):
         from django_field_encryption import EncryptedTextField
@@ -409,13 +419,13 @@ class TestGenerateMasterKey(TestCase):
 class TestErrorHandling(TestCase):
     def test_encrypt_without_config_raises_error(self):
         from django_field_encryption import FieldEncryptor
-        from django_field_encryption.exceptions import EncryptionNotConfiguredError
+        from django_field_encryption.exceptions import ConfigurationError
 
         FieldEncryptor.clear_cache()
         no_keys_settings = {}
         with override_settings(**no_keys_settings):
             FieldEncryptor.clear_cache()
-            with self.assertRaises(EncryptionNotConfiguredError):
+            with self.assertRaises(ConfigurationError):
                 FieldEncryptor.encrypt('test')
 
     def test_encrypt_with_unknown_key_raises_error(self):
@@ -514,14 +524,14 @@ class TestErrorHandling(TestCase):
 class TestFieldStrictMode(TestCase):
     def test_encrypted_char_field_strict_raises_on_encrypt_error(self):
         from django_field_encryption import EncryptedCharField, FieldEncryptor
-        from django_field_encryption.exceptions import EncryptionNotConfiguredError
+        from django_field_encryption.exceptions import ConfigurationError
 
         FieldEncryptor.clear_cache()
         no_keys_settings = {}
         with override_settings(**no_keys_settings):
             FieldEncryptor.clear_cache()
             field = EncryptedCharField(strict=True)
-            with self.assertRaises(EncryptionNotConfiguredError):
+            with self.assertRaises(ConfigurationError):
                 field.get_prep_value('test')
 
     def test_encrypted_char_field_non_strict_passes_through(self):
@@ -764,7 +774,7 @@ class TestComputeHash(TestCase):
 
     def test_compute_hash_without_config_raises_error(self):
         from django_field_encryption import FieldEncryptor, compute_hash
-        from django_field_encryption.exceptions import EncryptionNotConfiguredError
+        from django_field_encryption.exceptions import ConfigurationError
 
         FieldEncryptor.clear_cache()
         no_keys_settings = {
@@ -773,7 +783,7 @@ class TestComputeHash(TestCase):
         }
         with override_settings(**no_keys_settings):
             FieldEncryptor.clear_cache()
-            with self.assertRaises(EncryptionNotConfiguredError):
+            with self.assertRaises(ConfigurationError):
                 compute_hash('test_value')
 
 

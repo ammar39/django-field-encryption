@@ -1,3 +1,4 @@
+import types as _types
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Optional
 
@@ -6,7 +7,7 @@ from django.db.models import QuerySet
 from django.http import HttpRequest
 
 from .encryption import compute_hash
-from .fields import EncryptedCharField, EncryptedJSONField, EncryptedTextField
+from .fields import ENCRYPTED_FIELD_CLASSES
 
 if TYPE_CHECKING:
     Base = ModelAdmin
@@ -59,9 +60,7 @@ class EncryptedFieldAdminMixin(Base):
         return [
             f.name  # type: ignore[typeddict-item]
             for f in self.model._meta.fields
-            if isinstance(
-                f, (EncryptedCharField, EncryptedTextField, EncryptedJSONField)
-            )
+            if isinstance(f, ENCRYPTED_FIELD_CLASSES)
         ]
 
     def _masked_display_name(self, field_name: str) -> str:
@@ -71,12 +70,10 @@ class EncryptedFieldAdminMixin(Base):
 
         mask = self.encrypted_field_mask
 
-        def _display(
-            self_admin: object, _fn: str = field_name, _mask: str = mask
-        ) -> str:
+        def _display(_self, _fn=field_name, _mask=mask):
             return _mask
 
-        setattr(type(self), method_name, _display)
+        setattr(self, method_name, _types.MethodType(_display, self))
         return method_name
 
 

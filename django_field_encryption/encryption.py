@@ -145,13 +145,13 @@ class FieldEncryptor:
             return False
 
     @classmethod
-    def rotate_value(cls, encrypted: str) -> Optional[str]:
+    def rotate_value(cls, encrypted: str) -> str:
         if not encrypted or PREFIX_SEPARATOR not in encrypted:
-            return None
+            return encrypted
         old_key_id = encrypted.split(PREFIX_SEPARATOR, 1)[0]
         active_key_id = _get_active_key_id()
         if old_key_id == active_key_id:
-            return None
+            return encrypted
         plaintext = cls.decrypt(encrypted)
         return cls.encrypt(plaintext)
 
@@ -268,10 +268,9 @@ def _derive_hash_key(master_key: bytes, key_id: str) -> bytes:
     with _cache_lock:
         if cache_key in _hash_key_cache:
             return _hash_key_cache[cache_key]
-    derived = _derive_aes_key(master_key, key_id, HASH_KEY_INFO_PREFIX)
-    with _cache_lock:
+        derived = _derive_aes_key(master_key, key_id, HASH_KEY_INFO_PREFIX)
         _hash_key_cache[cache_key] = derived
-    return derived
+        return derived
 
 
 def compute_hash(value: str, key_id: Optional[str] = None) -> str:

@@ -1,12 +1,9 @@
 from django.core.management.base import BaseCommand
+from django.db import transaction
 
 from django_field_encryption import FieldEncryptor, get_active_key_id, get_keys_config
 from django_field_encryption.encryption import PREFIX_SEPARATOR
-from django_field_encryption.fields import (
-    EncryptedCharField,
-    EncryptedJSONField,
-    EncryptedTextField,
-)
+from django_field_encryption.fields import ENCRYPTED_FIELD_CLASSES
 
 
 class Command(BaseCommand):
@@ -41,7 +38,7 @@ class Command(BaseCommand):
 
         if not active_key_id or not keys_config:
             self.stderr.write(
-                self.style.ERROR(  # type: ignore[union-attr]
+                self.style.ERROR(
                     'No encryption keys configured. '
                     'Set DATA_PROTECTION_KEYS and DATA_PROTECTION_ACTIVE_KEY_ID in settings.'
                 )
@@ -51,12 +48,6 @@ class Command(BaseCommand):
         self.stdout.write(f'Active key: {active_key_id}')
         self.stdout.write(f'Known keys: {", ".join(sorted(keys_config.keys()))}')
         self.stdout.write('')
-
-        encrypted_field_classes = (
-            EncryptedCharField,
-            EncryptedTextField,
-            EncryptedJSONField,
-        )
 
         from django.apps import apps
 
@@ -70,7 +61,7 @@ class Command(BaseCommand):
             encrypted_fields = [
                 field
                 for field in model._meta.fields
-                if isinstance(field, encrypted_field_classes)
+                if isinstance(field, ENCRYPTED_FIELD_CLASSES)
             ]
 
             if not encrypted_fields:
@@ -80,7 +71,7 @@ class Command(BaseCommand):
 
             for field in encrypted_fields:
                 field_name = field.name
-                queryset = model.objects.all()
+                queryset = model.objects.all().order_by('pk')
                 total = queryset.count()
 
                 if total == 0:
@@ -89,13 +80,18 @@ class Command(BaseCommand):
 
                 rotated = 0
                 skipped = 0
+                last_pk = None
 
-                for offset in range(0, total, batch_size):
+                while True:
+                    batch_qs = queryset
+                    if last_pk is not None:
+                        batch_qs = batch_qs.filter(pk__gt=last_pk)
                     raw_values = list(
-                        queryset[offset : offset + batch_size].values_list(
-                            'pk', field_name
-                        )
+                        batch_qs[:batch_size].values_list('pk', field_name)
                     )
+                    if not raw_values:
+                        break
+
                     updates = []
 
                     for pk, raw_value in raw_values:
@@ -124,12 +120,15 @@ class Command(BaseCommand):
                         rotated += 1
 
                     if updates and not dry_run:
-                        objs = []
-                        for pk, val in updates:
-                            obj = model(pk=pk)
-                            setattr(obj, field_name, val)
-                            objs.append(obj)
-                        model.objects.bulk_update(objs, [field_name])
+                        with transaction.atomic():
+                            objs = []
+                            for pk, val in updates:
+                                obj = model(pk=pk)
+                                setattr(obj, field_name, val)
+                                objs.append(obj)
+                            model.objects.bulk_update(objs, [field_name])
+
+                    last_pk = raw_values[-1][0]
 
                 self.stdout.write(
                     f'  {field_name}: {rotated} rotated, {skipped} skipped (out of {total})'
@@ -140,14 +139,14 @@ class Command(BaseCommand):
         self.stdout.write('')
         if dry_run:
             self.stdout.write(
-                self.style.WARNING(  # type: ignore[union-attr]
+                self.style.WARNING(
                     f'Dry run: {total_rotated} records would be rotated, '
                     f'{total_skipped} already using active key.'
                 )
             )
         else:
             self.stdout.write(
-                self.style.SUCCESS(  # type: ignore[union-attr]
+                self.style.SUCCESS(
                     f'Rotation complete: {total_rotated} records rotated, '
                     f'{total_skipped} already using active key.'
                 )

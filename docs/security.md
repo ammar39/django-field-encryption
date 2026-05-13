@@ -173,22 +173,28 @@ DATA_PROTECTION_KEYS = {
 
 1. Add new key to DATA_PROTECTION_KEYS
 2. Set DATA_PROTECTION_ACTIVE_KEY_ID to new key
-3. Re-encrypt existing data using FieldEncryptor.rotate_value()
-4. Keep old key for decryption during transition
+3. Re-encrypt existing data:
 
 ```python
-# rotate_keys.py
-from django_field_encryption import FieldEncryptor
+from django_field_encryption import rotate_keys, rotate_model_fields
 
-def rotate_field(field_name):
-    Model = apps.get_model('app', 'Model')
-    for obj in Model.objects.all():
-        value = getattr(obj, field_name)
-        if value and FieldEncryptor.can_decrypt(value):
-            rotated = FieldEncryptor.rotate_value(value)
-            if rotated:
-                setattr(obj, field_name, rotated)
-                obj.save()
+rotate_keys(app_label='myapp')
+rotate_model_fields(User, field_names=['ssn'])
+```
+
+4. Keep old key for decryption during transition
+
+Dry run:
+
+```python
+rotate_keys(dry_run=True)
+```
+
+Management command:
+
+```bash
+python manage.py rotate_encryption_keys --dry-run
+python manage.py rotate_encryption_keys
 ```
 
 ### Application Security

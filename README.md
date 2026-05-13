@@ -319,22 +319,27 @@ secret = EncryptedTextField()
 
 ### Key rotation
 
+Re-encrypt existing data with the active key:
+
+```python
+from django_field_encryption import rotate_keys, rotate_model_fields
+
+# All models
+rotate_keys(app_label='myapp')
+
+# Single model and field
+rotate_model_fields(User, field_names=['ssn'])
+
+# Single value
+FieldEncryptor.rotate_value(old_encrypted_value)
+```
+
+Management command:
+
 ```bash
 python manage.py rotate_encryption_keys --dry-run
 python manage.py rotate_encryption_keys
 python manage.py rotate_encryption_keys --app-label myapp --batch-size 500
-```
-
-For selective rotation:
-
-```python
-from django_field_encryption import FieldEncryptor
-
-for obj in MyModel.objects.all():
-    new_value = FieldEncryptor.rotate_value(obj.secret)
-    if new_value is not None:
-        obj.secret = new_value
-        obj.save(update_fields=['secret'])
 ```
 
 After rotation, recompute blind index hashes:
@@ -442,6 +447,15 @@ key = generate_master_key()
 # Returns: base64-encoded 32-byte key
 ```
 
+### Key Rotation Functions
+
+```python
+rotate_keys(app_label='myapp', dry_run=True)
+rotate_model_fields(User, field_names=['ssn'])
+```
+
+Both return ``{'label': {'rotated': N, 'skipped': N}}`` and accept ``batch_size`` and ``dry_run``.
+
 ### Configuration Functions
 
 ```python
@@ -449,11 +463,12 @@ from django_field_encryption import (
     get_keys_config,
     get_active_key_id,
     get_master_key,
+    rotate_keys,
 )
 
 keys = get_keys_config()          # Returns dict of key_id -> key
 active_key = get_active_key_id()  # Returns currently active key_id
-master_key = get_master_key('v1') # Returns raw 32-byte key for key_id
+master_key = get_master_key('v1') # Returns MasterKey wrapper; use bytes() for raw key
 ```
 
 ### Exceptions
