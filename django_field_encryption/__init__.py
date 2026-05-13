@@ -32,7 +32,7 @@ from .fields import (
     EncryptedMaxLengthValidator,
     EncryptedTextField,
 )
-from .rotation import rotate_keys
+from .rotation import rotate_keys, rotate_model_fields
 from .storage import (
     BaseEncryptedStorage,
     EncryptedFileStorage,
@@ -71,4 +71,5 @@ __all__ = [
     'EncryptedFieldAdminMixin',
     'EncryptedSearchMixin',
     'rotate_keys',
+    'rotate_model_fields',
 ]
