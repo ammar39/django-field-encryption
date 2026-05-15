@@ -1013,3 +1013,85 @@ class TestBlindIndexFieldKeyPinningDeconstruct(TestCase):
         hash_v1 = compute_hash('same_value', key_id='v1')
         hash_v2 = compute_hash('same_value', key_id='v2')
         self.assertNotEqual(hash_v1, hash_v2)
+
+
+@override_settings(**ENCRYPTION_SETTINGS)
+class TestAADCopyPasteProtection(TestCase):
+    def setUp(self):
+        from django_field_encryption import FieldEncryptor
+
+        FieldEncryptor.clear_cache()
+        self.encryptor = FieldEncryptor
+
+    def test_aad_roundtrip(self):
+        aad = b'test:model:1'
+        encrypted = self.encryptor.encrypt('secret', aad=aad)
+        self.assertEqual(self.encryptor.decrypt(encrypted, aad=aad), 'secret')
+
+    def test_wrong_aad_raises_decryption_error(self):
+        from django_field_encryption.exceptions import DecryptionError
+
+        encrypted = self.encryptor.encrypt('secret', aad=b'context_a')
+        with self.assertRaises(DecryptionError):
+            self.encryptor.decrypt(encrypted, aad=b'context_b')
+        with self.assertRaises(DecryptionError):
+            self.encryptor.decrypt(encrypted, aad=None)
+
+    def test_bound_field_uses_aad_prevents_cross_context_swap(self):
+        from django.db import models
+
+        from django_field_encryption import EncryptedCharField
+        from django_field_encryption.exceptions import DecryptionError
+
+        class AADModelA(models.Model):
+            secret = EncryptedCharField(max_length=255)
+
+            class Meta:
+                app_label = 'tests'
+
+        class AADModelB(models.Model):
+            field_x = EncryptedCharField(max_length=255)
+            field_y = EncryptedCharField(max_length=255)
+
+            class Meta:
+                app_label = 'tests'
+
+        field_a = AADModelA._meta.get_field('secret')
+        field_x = AADModelB._meta.get_field('field_x')
+        field_y = AADModelB._meta.get_field('field_y')
+
+        enc_a = field_a._encrypt_value('from_a')
+        enc_x = field_x._encrypt_value('from_x')
+        enc_y = field_y._encrypt_value('from_y')
+
+        for src, dst in [
+            (enc_a, field_x),
+            (enc_x, field_a),
+            (enc_x, field_y),
+            (enc_y, field_x),
+        ]:
+            with self.assertRaises(DecryptionError):
+                dst._decrypt_value(src)
+
+    def test_unbound_field_works_without_aad(self):
+        from django_field_encryption import EncryptedCharField
+
+        field = EncryptedCharField()
+        encrypted = field._encrypt_value('secret')
+        self.assertEqual(field._decrypt_value(encrypted), 'secret')
+
+    def test_backward_compat_old_ciphertext(self):
+        from django.db import models
+
+        from django_field_encryption import EncryptedCharField
+
+        old = self.encryptor.encrypt('legacy', aad=None)
+
+        class AADCompatModel(models.Model):
+            secret = EncryptedCharField(max_length=255)
+
+            class Meta:
+                app_label = 'tests'
+
+        field = AADCompatModel._meta.get_field('secret')
+        self.assertEqual(field._decrypt_value(old), 'legacy')

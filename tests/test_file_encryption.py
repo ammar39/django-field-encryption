@@ -141,3 +141,32 @@ class TestFileErrorHandling(TestCase):
             FileEncryptor.clear_cache()
             with self.assertRaises(ConfigurationError):
                 FileEncryptor.encrypt(b'test')
+
+
+@override_settings(**ENCRYPTION_SETTINGS)
+class TestFileAADCopyPasteProtection(TestCase):
+    def setUp(self):
+        from django_field_encryption import FileEncryptor
+
+        self.encryptor = FileEncryptor
+        self.encryptor.clear_cache()
+
+    def test_aad_roundtrip(self):
+        encrypted, key_id = self.encryptor.encrypt(b'secret', aad=b'path/file.pdf')
+        self.assertEqual(key_id, 'v1')
+        self.assertEqual(
+            self.encryptor.decrypt(encrypted, aad=b'path/file.pdf'), b'secret'
+        )
+
+    def test_wrong_aad_raises_decryption_error(self):
+        from django_field_encryption.exceptions import DecryptionError
+
+        encrypted, _ = self.encryptor.encrypt(b'secret', aad=b'path_a/file.pdf')
+        with self.assertRaises(DecryptionError):
+            self.encryptor.decrypt(encrypted, aad=b'path_b/file.pdf')
+        with self.assertRaises(DecryptionError):
+            self.encryptor.decrypt(encrypted, aad=None)
+
+    def test_backward_compat_old_files(self):
+        old, _ = self.encryptor.encrypt(b'legacy', aad=None)
+        self.assertEqual(self.encryptor.decrypt(old, aad=None), b'legacy')
