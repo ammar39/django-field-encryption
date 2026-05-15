@@ -64,7 +64,9 @@ class FieldEncryptor:
             return aesgcm
 
     @classmethod
-    def encrypt(cls, plaintext: str, key_id: Optional[str] = None) -> str:
+    def encrypt(
+        cls, plaintext: str, key_id: Optional[str] = None, aad: Optional[bytes] = None
+    ) -> str:
         if key_id is None:
             key_id = _get_active_key_id()
         if not key_id:
@@ -75,7 +77,7 @@ class FieldEncryptor:
         try:
             nonce = os.urandom(NONCE_LENGTH)
             aesgcm = cls._get_aesgcm(key_id)
-            ciphertext_with_tag = aesgcm.encrypt(nonce, plaintext.encode('utf-8'), None)
+            ciphertext_with_tag = aesgcm.encrypt(nonce, plaintext.encode('utf-8'), aad)
             payload = nonce + ciphertext_with_tag
             encoded = base64.urlsafe_b64encode(payload).decode('ascii')
             return f'{key_id}{PREFIX_SEPARATOR}{encoded}'
@@ -86,7 +88,7 @@ class FieldEncryptor:
             raise EncryptionError(f'Encryption failed: {str(e)}') from e
 
     @classmethod
-    def decrypt(cls, encrypted: str) -> str:
+    def decrypt(cls, encrypted: str, aad: Optional[bytes] = None) -> str:
         if not encrypted or PREFIX_SEPARATOR not in encrypted:
             return encrypted
         try:
@@ -110,7 +112,7 @@ class FieldEncryptor:
             nonce = payload[:NONCE_LENGTH]
             ciphertext_with_tag = payload[NONCE_LENGTH:]
             aesgcm = cls._get_aesgcm(key_id)
-            return aesgcm.decrypt(nonce, ciphertext_with_tag, None).decode('utf-8')
+            return aesgcm.decrypt(nonce, ciphertext_with_tag, aad).decode('utf-8')
         except InvalidKeyError:
             raise
         except InvalidTag as e:
@@ -177,7 +179,7 @@ class FileEncryptor:
             return aesgcm
 
     @classmethod
-    def encrypt(cls, data: bytes) -> tuple[bytes, str]:
+    def encrypt(cls, data: bytes, aad: Optional[bytes] = None) -> tuple[bytes, str]:
         key_id = _get_active_key_id()
         if not key_id:
             raise EncryptionNotConfiguredError(
@@ -187,7 +189,7 @@ class FileEncryptor:
         try:
             nonce = os.urandom(NONCE_LENGTH)
             aesgcm = cls._get_aesgcm(key_id)
-            ciphertext_with_tag = aesgcm.encrypt(nonce, data, None)
+            ciphertext_with_tag = aesgcm.encrypt(nonce, data, aad)
             key_id_bytes = key_id.encode('utf-8')
             key_id_len = len(key_id_bytes)
             result = (
@@ -205,7 +207,7 @@ class FileEncryptor:
             raise EncryptionError(f'File encryption failed: {str(e)}') from e
 
     @classmethod
-    def decrypt(cls, data: bytes) -> bytes:
+    def decrypt(cls, data: bytes, aad: Optional[bytes] = None) -> bytes:
         if not data or not data[:4] == cls.FILE_MAGIC:
             return data
         key_id: Optional[str] = None
@@ -233,7 +235,7 @@ class FileEncryptor:
 
         try:
             aesgcm = cls._get_aesgcm(key_id)
-            return aesgcm.decrypt(nonce, ciphertext_with_tag, None)
+            return aesgcm.decrypt(nonce, ciphertext_with_tag, aad)
         except InvalidKeyError:
             raise
         except InvalidTag as e:
