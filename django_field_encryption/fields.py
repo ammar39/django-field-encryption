@@ -28,6 +28,8 @@ class EncryptedMaxLengthValidator(MaxLengthValidator):
 class EncryptedFieldMixin(Base):
     _field_path: str = ''
     default_validators: list = []
+    _model_label: str = ''
+    _field_name: str = ''
 
     def __init__(
         self,
@@ -51,6 +53,24 @@ class EncryptedFieldMixin(Base):
         self._strict = strict
         self._key_id = key_id
         super().__init__(*args, **kwargs)
+
+    def contribute_to_class(self, cls, name, **kwargs: Any):
+        self._model_label = cls._meta.label_lower
+        self._field_name = name
+        super().contribute_to_class(cls, name, **kwargs)
+
+    def _build_aad(self, instance: Any) -> Optional[bytes]:
+        if not self._model_label or not self._field_name:
+            return None
+        pk = getattr(instance, 'pk', None)
+        if pk is not None:
+            return f'{self._model_label}:{self._field_name}:{pk}'.encode()
+        return f'{self._model_label}:{self._field_name}'.encode()
+
+    def _build_aad_static(self) -> Optional[bytes]:
+        if not self._model_label or not self._field_name:
+            return None
+        return f'{self._model_label}:{self._field_name}'.encode()
 
     def get_lookup(self, lookup_name):
         if lookup_name != 'isnull':
@@ -91,9 +111,15 @@ class EncryptedFieldMixin(Base):
                     f'Value does not appear to be encrypted: {value!r}'
                 )
             return value
+        aad = self._build_aad_static()
         try:
-            return FieldEncryptor.decrypt(value)
+            return FieldEncryptor.decrypt(value, aad=aad)
         except DecryptionError:
+            if aad is not None:
+                try:
+                    return FieldEncryptor.decrypt(value, aad=None)
+                except DecryptionError:
+                    pass
             if self._strict:
                 raise
             return value
@@ -107,6 +133,8 @@ class EncryptedFieldMixin(Base):
         if decrypted is None or decrypted == '':
             return decrypted
         try:
+            if hasattr(super(), 'from_db_value'):
+                return super().from_db_value(decrypted, expression, connection)  # type: ignore
             return super().to_python(decrypted)
         except (ValueError, TypeError, ValidationError):
             return decrypted
@@ -114,19 +142,20 @@ class EncryptedFieldMixin(Base):
     def to_python(self, value):
         if value is None or value == '':
             return value
-        value = self._decrypt_value(value)
-        if value is None or value == '':
-            return value
+        decrypted = self._decrypt_value(value)
+        if decrypted is None or decrypted == '':
+            return decrypted
         try:
-            return super().to_python(value)
+            return super().to_python(decrypted)
         except (ValueError, TypeError, ValidationError):
-            return value
+            return decrypted
 
     def _encrypt_value(self, value):
         if value is None:
             return value
         try:
-            return FieldEncryptor.encrypt(str(value), key_id=self._key_id)
+            aad = self._build_aad_static()
+            return FieldEncryptor.encrypt(str(value), key_id=self._key_id, aad=aad)
         except EncryptionError:
             if self._strict:
                 raise
