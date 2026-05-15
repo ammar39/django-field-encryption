@@ -36,6 +36,7 @@ class EncryptedFieldMixin(Base):
         *args: Any,
         strict: bool = True,
         key_id: Optional[str] = None,
+        enforce_aad: bool = False,
         **kwargs: Any,
     ):
         if kwargs.get('primary_key'):
@@ -52,6 +53,7 @@ class EncryptedFieldMixin(Base):
             )
         self._strict = strict
         self._key_id = key_id
+        self._enforce_aad = enforce_aad
         super().__init__(*args, **kwargs)
 
     def contribute_to_class(self, cls, name, **kwargs: Any):
@@ -100,6 +102,8 @@ class EncryptedFieldMixin(Base):
             kwargs['strict'] = False
         if self._key_id:
             kwargs['key_id'] = self._key_id
+        if not self._enforce_aad:
+            kwargs['enforce_aad'] = False
         return name, path, args, kwargs
 
     def _decrypt_value(self, value):
@@ -115,7 +119,7 @@ class EncryptedFieldMixin(Base):
         try:
             return FieldEncryptor.decrypt(value, aad=aad)
         except DecryptionError:
-            if aad is not None:
+            if aad is not None and not self._enforce_aad:
                 try:
                     return FieldEncryptor.decrypt(value, aad=None)
                 except DecryptionError:
@@ -200,10 +204,13 @@ class EncryptedCharField(EncryptedFieldMixin, models.TextField):
         strict: bool = True,
         max_length: int = 255,
         key_id: Optional[str] = None,
+        enforce_aad: bool = False,
         **kwargs: Any,
     ):
         kwargs.pop('max_length', None)
-        super().__init__(*args, strict=strict, key_id=key_id, **kwargs)
+        super().__init__(
+            *args, strict=strict, key_id=key_id, enforce_aad=enforce_aad, **kwargs
+        )
         self.max_length = max_length
 
     @property

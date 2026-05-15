@@ -1044,14 +1044,14 @@ class TestAADCopyPasteProtection(TestCase):
         from django_field_encryption.exceptions import DecryptionError
 
         class AADModelA(models.Model):
-            secret = EncryptedCharField(max_length=255)
+            secret = EncryptedCharField(max_length=255, enforce_aad=True)
 
             class Meta:
                 app_label = 'tests'
 
         class AADModelB(models.Model):
-            field_x = EncryptedCharField(max_length=255)
-            field_y = EncryptedCharField(max_length=255)
+            field_x = EncryptedCharField(max_length=255, enforce_aad=True)
+            field_y = EncryptedCharField(max_length=255, enforce_aad=True)
 
             class Meta:
                 app_label = 'tests'
@@ -1095,3 +1095,62 @@ class TestAADCopyPasteProtection(TestCase):
 
         field = AADCompatModel._meta.get_field('secret')
         self.assertEqual(field._decrypt_value(old), 'legacy')
+
+    def test_enforce_aad_raises_immediately_on_old_ciphertext(self):
+        from django.db import models
+
+        from django_field_encryption import EncryptedCharField
+        from django_field_encryption.exceptions import DecryptionError
+
+        old = self.encryptor.encrypt('legacy', aad=None)
+
+        class EnforcedAADModel(models.Model):
+            secret = EncryptedCharField(max_length=255, enforce_aad=True)
+
+            class Meta:
+                app_label = 'tests'
+
+        field = EnforcedAADModel._meta.get_field('secret')
+        with self.assertRaises(DecryptionError):
+            field._decrypt_value(old)
+
+    def test_enforce_aad_false_falls_back_to_old_ciphertext(self):
+        from django.db import models
+
+        from django_field_encryption import EncryptedCharField
+
+        old = self.encryptor.encrypt('legacy', aad=None)
+
+        class RelaxedAADModel(models.Model):
+            secret = EncryptedCharField(max_length=255, enforce_aad=False)
+
+            class Meta:
+                app_label = 'tests'
+
+        field = RelaxedAADModel._meta.get_field('secret')
+        self.assertEqual(field._decrypt_value(old), 'legacy')
+
+    def test_enforce_aad_false_falls_back_on_context_mismatch(self):
+        from django.db import models
+
+        from django_field_encryption import EncryptedCharField
+        from django_field_encryption.exceptions import DecryptionError
+
+        class SourceModel(models.Model):
+            value = EncryptedCharField(max_length=255)
+
+            class Meta:
+                app_label = 'tests'
+
+        class TargetModel(models.Model):
+            value = EncryptedCharField(max_length=255, enforce_aad=False)
+
+            class Meta:
+                app_label = 'tests'
+
+        source_field = SourceModel._meta.get_field('value')
+        target_field = TargetModel._meta.get_field('value')
+
+        encrypted = source_field._encrypt_value('cross_field_value')
+        with self.assertRaises(DecryptionError):
+            target_field._decrypt_value(encrypted)
