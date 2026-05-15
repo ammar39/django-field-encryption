@@ -28,22 +28,27 @@ class BaseEncryptedStorage(Storage):
                 f'AES-GCM requires the full file in memory for authentication tag '
                 f'verification. Increase max_file_size if this is intentional.'
             )
-        encrypted_data, _key_id = FileEncryptor.encrypt(raw_data)
+        aad = name.encode()
+        encrypted_data, _key_id = FileEncryptor.encrypt(raw_data, aad=aad)
         encrypted_content = ContentFile(encrypted_data)
         encrypted_content.name = content.name if hasattr(content, 'name') else name
-        return self._storage._save(name, encrypted_content)
+        return self._storage._save(name, encrypted_content)  # type: ignore
 
     def _open(self, name, mode='rb'):
-        storage_file = self._storage._open(name, mode)
+        storage_file = self._storage._open(name, mode)  # type: ignore
         raw_data = storage_file.read()
-        decrypted_data = FileEncryptor.decrypt(raw_data)
+        aad = name.encode()
+        try:
+            decrypted_data = FileEncryptor.decrypt(raw_data, aad=aad)
+        except Exception:
+            decrypted_data = FileEncryptor.decrypt(raw_data, aad=None)
         buf = io.BytesIO(decrypted_data)
         return File(buf, name=name)
 
     def is_encrypted(self, name):
         if not self.exists(name):
             return False
-        with self._storage._open(name) as f:
+        with self._storage._open(name) as f:  # type: ignore
             header = f.read(4)
         return FileEncryptor.is_encrypted(header)
 
